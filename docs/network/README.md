@@ -17,11 +17,14 @@ The primary objective is to guarantee the timely, secure, and resilient transfer
 
 ```
 +-------------------------------------------------------------------------------+
-| LAYER 1: Wearable Hardware (Sensors, Multiplexer, ADC, Battery)               |
+| LAYER 1: Wearable Hardware (Sensors, Multiplexer, ADC, Battery [Proposed])     |
 +-------------------------------------------------------------------------------+
                                        | Analog / I2C
 +-------------------------------------------------------------------------------+
-| LAYER 2: Edge Processing (ESP32-S3 FreeRTOS, TinyML, Filtering, Safety Trip)  |
+| LAYER 2: Edge Processing                                                      |
+|   - Current: Arduino loop(), sensor sampling, filtering, health tracking      |
+|   - Proposed Future Architecture: FreeRTOS dual-core task pinning, TinyML,     |
+|     safety cut-off trip logic                                                 |
 +-------------------------------------------------------------------------------+
                                        |
     ===================================v===================================
@@ -33,9 +36,11 @@ The primary objective is to guarantee the timely, secure, and resilient transfer
     ===================================+===================================
                                        |
 +-------------------------------------------------------------------------------+
-| LAYER 4: Cloud Ingestion, Storage, and Clinician Dashboard                    |
+| LAYER 4: Cloud Ingestion, Storage, and Clinician Dashboard [Proposed]         |
 +-------------------------------------------------------------------------------+
 ```
+
+*Note on Edge Architecture*: While project conceptual specifications describe FreeRTOS dual-core task scheduling (Core 0 for sampling, Core 1 for communication/TinyML), the current firmware executes single-threaded within the standard Arduino `setup()` and `loop()`. Multi-core task pinning and TinyML integration remain proposed future architecture elements that require firmware-level refactoring.
 
 ### 1.2 Core Responsibilities
 - **Connectivity Management**: Implementing reliable wireless connectivity routines (Station mode, SoftAP provisioning, or BLE GATT server) with deterministic auto-reconnect and recovery.
@@ -43,7 +48,7 @@ The primary objective is to guarantee the timely, secure, and resilient transfer
 - **Offline Telemetry Resilience**: Designing buffering and catch-up mechanisms to preserve rehabilitation data across wireless dropouts and transient disconnections.
 - **Security & Privacy Implementation**: Enforcing medical-grade transport encryption and strict decoupling of personal identification from raw bio-telemetry.
 - **Cross-Team Integration Contracts**:
-  - *With Firmware*: Providing non-blocking communication hooks so network activity never delays deterministic on-brace safety cut-offs (<500 ms) or sensor sampling routines (50 Hz).
+  - *With Firmware*: Providing non-blocking communication hooks so network activity never blocks or degrades high-frequency sensor acquisition (50 Hz) or the proposed on-brace safety cut-off target (<500 ms, specified in project requirements as a target to be verified on hardware).
   - *With Backend & Dashboard*: Establishing schemas, protocol specifications, and validation suites for cloud ingestion endpoints and real-time live telemetry feeds.
 
 ---
@@ -131,7 +136,7 @@ Every 250 ms (4 Hz), the firmware formats a JSON record printed to `Serial`:
 }
 ```
 
-> **Network Integration Takeaway**: This telemetry structure represents the baseline data model that the network layer must encapsulate, serialize, and transmit without degrading sampling performance.
+> **Firmware-to-Network Interface Notice**: The fields printed by `report()` illustrate the raw data categories available in memory. However, the network development module **must not assume it will parse the printed serial JSON string directly**. The actual in-firmware software interface (e.g., exposing an internal C++ telemetry data struct, a shared ring-buffer pointer, or a FreeRTOS event queue) must be formally coordinated and agreed upon with the firmware team.
 
 ---
 
@@ -159,11 +164,12 @@ OPTION B: Direct ESP32-to-Cloud via Wi-Fi Architecture
 
 | Architectural Factor | Option A: BLE 5.0 + Mobile Gateway | Option B: Direct ESP32 Wi-Fi |
 | :--- | :--- | :--- |
-| **Wearable Power Draw** | Very low (5–15 mA typical during BLE connection). Maximizes battery life on 18650 cells. | Higher (80–180 mA during Wi-Fi transmission bursts). Requires strict power management. |
+| **Wearable Power Draw** | Significantly lower average draw; illustrative estimates from generic ESP32 datasheets suggest ~5–15 mA during active BLE connection, but empirical profiling on the actual hardware is required. | Higher current peaks during RF transmission; illustrative estimates from generic ESP32 datasheets suggest ~80–180 mA during TX bursts, requiring empirical profiling on the actual hardware. |
+| **Power Source Consideration** | Proposed specifications suggest 18650 Li-ion cells, but total battery capacity and operating duration under continuous streaming remain subject to hardware team confirmation. | Higher transmission peaks place greater demand on battery capacity and voltage regulation under continuous streaming. |
 | **Network Provisioning** | Not required on brace. Smartphone manages its own cellular/Wi-Fi connection. | Requires on-brace Wi-Fi provisioning (SoftAP captive portal) for home networks. |
-| **Client Software Dependency** | **High**: Requires creating and maintaining a native/cross-platform mobile app (Flutter/React Native). | **Zero**: Brace communicates directly with cloud endpoints without a middle app. |
-| **Range & Mobility** | Constrained to within ~10 meters of the patient's smartphone. | Operates anywhere within coverage of the patient's home Wi-Fi network. |
-| **Offline Buffering Location** | Offloaded to smartphone local SQLite storage (up to 72 hours). | Must be stored directly on wearable hardware (PSRAM / SPIFFS Flash). |
+| **Client Software Dependency** | **High**: Requires creating and maintaining a dedicated mobile application (iOS/Android). | **Zero**: Brace communicates directly with cloud endpoints without a middle app. |
+| **Range & Mobility** | Constrained to within short-range radio distance (~10 meters) of the patient's smartphone. | Operates anywhere within coverage of the patient's home Wi-Fi network. |
+| **Offline Buffering Location** | Proposed conceptual designs suggest offloading buffering (e.g. up to 72 hours) to smartphone local storage (such as SQLite), subject to mobile gateway implementation. | Buffering must be handled directly on the wearable hardware (PSRAM / SPIFFS Flash). |
 
 ### 4.2 Candidate Uplink Protocols `[Pending Decision with Backend Team]`
 For data transit between the edge node (or mobile gateway) and the cloud, three protocols are under evaluation:
@@ -179,7 +185,7 @@ For data transit between the edge node (or mobile gateway) and the cloud, three 
    - *Considerations*: Greater memory overhead per active connection on both client and server; sensitive to transient network disconnections.
 
 ### 4.3 Packet Structure & Sizing `[Pending Technical Design]`
-While the project overview documentation refers to a 24-byte telemetry packet, **the exact binary or text framing has not been finalized or implemented**.
+While project conceptual documentation mentions an illustrative 24-byte telemetry packet, **the exact binary or text framing has not been finalized or implemented**.
 
 - *Design Task*: The network sub-team must formulate a formal serialization specification. Options include:
   - **Packed Binary Struct**: Fixed-point integer representations (e.g., scaling acceleration floats by $1000$ into `int16_t`) to minimize airtime and comply with standard BLE ATT MTU constraints without fragmentation.
@@ -201,11 +207,11 @@ If Option B (Direct Wi-Fi) or a hybrid dual-mode system is adopted, the wearable
    +----+--------------------------+
    | Valid Credentials Exist?      |
    +----+--------------------------+
-        | YES                      | NO / Failed Reconnects (>5 attempts)
+        | YES                      | NO / Failed Reconnects (>N attempts [proposed])
         v                          v
 [Station (STA) Mode]        [Activate SoftAP Mode]
-  Connect to Home Wi-Fi       SSID: "OrthoSense-Setup-XXXX"
-        |                     IP: 192.168.4.1 (DNS Captive Portal)
+  Connect to Home Wi-Fi       SSID: e.g., "OrthoSense-Setup-XXXX" [proposed]
+        |                     IP: e.g., 192.168.4.1 (Captive Portal) [proposed]
         |                          |
         |                   [Patient Connects Smartphone]
         |                          |
@@ -224,7 +230,8 @@ If Option B (Direct Wi-Fi) or a hybrid dual-mode system is adopted, the wearable
 ### 5.2 Key Functional Modules
 1. **Credential Persistence**: Utilizes the ESP32 Non-Volatile Storage (`Preferences` / `nvs_flash` partition) to retain SSID and passphrase across power cycles.
 2. **Lightweight Web Server & DNS Redirection**: An onboard asynchronous HTTP server that intercepts standard captive portal probe URLs (such as `connectivitycheck.gstatic.com`) to automatically redirect the patient's mobile browser to the setup portal.
-3. **Network Recovery Trigger**: If the patient changes their home router or moves locations, pressing a physical hardware button (or holding a combination) for 5 seconds clears stored credentials and forces the brace back into SoftAP provisioning mode.
+   - *Illustrative Parameters*: Values such as SoftAP SSID format (e.g., `OrthoSense-Setup-XXXX`), local gateway IP (e.g., `192.168.4.1`), reconnection attempt limits (e.g., 5 attempts), and recovery button hold times (e.g., 5 seconds) are proposed illustrative defaults that must be configured and tested with the team.
+3. **Network Recovery Trigger**: If the patient changes their home router or moves locations, triggering a dedicated hardware button or combination clears stored credentials and forces the brace back into SoftAP provisioning mode.
 
 ---
 
@@ -244,10 +251,10 @@ If Option B (Direct Wi-Fi) or a hybrid dual-mode system is adopted, the wearable
 - Storage of local Wi-Fi passwords and private keys inside protected NVS partitions.
 - Production recommendation: Enable ESP32-S3 hardware **Flash Encryption** and **Secure Boot** to prevent physical memory extraction via JTAG or serial bootloader dumps.
 
-### 6.3 Privacy by Design (PII Decoupling)
+### 6.3 Privacy by Design (PII Decoupling) & Regulatory Review
 - **Zero Plaintext PII on Wearable**: The brace firmware and wireless payloads must never transmit or store patient names, national identity numbers, contact details, or demographic data.
 - **Pseudonymous Identifiers**: Payloads transmit strictly an anonymized device identifier (`device_id`), dynamic rehabilitation session token (`session_id`), monotonic sequence counter, timestamp, and numerical floating-point vectors.
-- Association between device IDs and patient medical records occurs exclusively within the access-controlled cloud database behind HIPAA/GDPR-compliant authentication.
+- **Regulatory & Privacy Review**: Association between device IDs and patient medical records occurs exclusively within the access-controlled cloud database. Applicable healthcare privacy regulations and data protection requirements (e.g., institutional ethics standards, local health authority rules, or international standards) must be formally identified, documented, and reviewed by the project team.
 
 ---
 
@@ -265,8 +272,9 @@ If Option B (Direct Wi-Fi) or a hybrid dual-mode system is adopted, the wearable
 +-------------------------------------------------------------------------------+
 | PHASE 2: Ingestion Pipeline & Serialization                                   |
 | - Formalize binary packed struct vs. JSON payload specifications              |
-| - Implement MQTT client on ESP32 + local Mosquitto broker setup               |
-| - Deploy minimal FastAPI test ingestion receiver with database logging        |
+| - Implement candidate client stack (evaluating MQTT, REST, or WebSocket)       |
+| - Deploy minimal test ingestion receiver in coordination with backend team    |
+|   (backend framework selection between Django and FastAPI pending consensus)  |
 +-------------------------------------------------------------------------------+
                                        |
                                        v
@@ -280,8 +288,8 @@ If Option B (Direct Wi-Fi) or a hybrid dual-mode system is adopted, the wearable
                                        v
 +-------------------------------------------------------------------------------+
 | PHASE 4: End-to-End Validation & Live Streaming                               |
-| - WebSocket real-time live telemetry bridge to clinician web dashboard        |
-| - Benchmark packet loss, transmission latency (<500 ms target), and battery   |
+| - Real-time live telemetry bridge to clinician web dashboard                  |
+| - Benchmark packet loss, transmission latency, and empirical battery draw     |
 | - Fault injection testing (simulated router outages, packet drops)            |
 +-------------------------------------------------------------------------------+
 ```
@@ -294,7 +302,7 @@ The following architectural and design decisions must be formally discussed and 
 
 ### 8.1 Primary Network Architecture Selection
 - **Question**: Does the project commit to **Option A (BLE + Dedicated Smartphone App)**, **Option B (Direct ESP32-to-Cloud Wi-Fi)**, or a **Dual-Mode Architecture**?
-- **Implication**: Option A requires mobile app development resources outside the current scope. Option B requires battery capacity analysis to ensure Wi-Fi does not deplete the 18650 cells prematurely during multi-hour sessions.
+- **Implication**: Option A requires mobile app development resources outside the current scope. Option B requires empirical battery profiling to verify that Wi-Fi current consumption is sustainable for prescribed daily rehabilitation sessions.
 
 ### 8.2 Ingestion Protocol Consensus
 - **Question**: Which ingestion protocol will the backend team officially implement and support for wearable ingestion: **MQTT**, **REST (HTTPS)**, or **WebSockets (WSS)**?
@@ -316,6 +324,10 @@ The following architectural and design decisions must be formally discussed and 
 ### 8.5 Backend Framework Alignment
 - **Question**: Will the cloud backend be implemented using **Django** or **FastAPI**?
 - **Context**: The root `README.md` mentions both Django and FastAPI interchangeably, while the web directory currently contains a Next.js 16 structure. Clear alignment is required to ensure compatible client libraries and API schemas.
+
+### 8.6 Firmware-to-Network In-Memory Interface
+- **Question**: How will sensor metrics be handed off from the acquisition loop to the networking task inside the firmware?
+- **Context**: Options include passing a pointer to an internal C++ struct, pushing into a FreeRTOS thread-safe queue, or reading from a shared ring buffer. This must be aligned with the firmware developer rather than assuming serial string parsing.
 
 ---
 
