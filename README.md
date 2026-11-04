@@ -1,401 +1,227 @@
-<<<<<<< HEAD
-# OrthoSense: Multimodal Sensing Framework for Orthopedic Rehab Monitoring
+# OrthoSense — References and External Resources
 
-[![Department](https://img.shields.io/badge/Department-Computer%20Engineering%20%7C%20UoP-00529B.svg)](http://www.ce.pdn.ac.lk/)
-[![Course](https://img.shields.io/badge/Course-CO3060%203rd%20Year%20Project-orange.svg)](https://projects.ce.pdn.ac.lk/)
-[![Platform](https://img.shields.io/badge/Hardware-ESP32--S3%20Xtensa%20Dual--Core-red.svg)](https://www.espressif.com/en/products/socs/esp32-s3)
-[![Edge AI](https://img.shields.io/badge/Edge--AI-TensorFlow%20Lite%20Micro-FF6F00.svg)](https://www.tensorflow.org/lite/microcontrollers)
-[![Backend](https://img.shields.io/badge/Backend-Django%20%7C%20PostgreSQL-092E20.svg)](https://www.djangoproject.com/)
-[![Frontend](https://img.shields.io/badge/Frontend-React%20%7C%20Vite-61DAFB.svg)](https://react.dev/)
-[![Prototype Cost](https://img.shields.io/badge/Prototype%20Cost-%3CRs.%208%2C870%20LKR%20%28~%2425%20USD%29-brightgreen.svg)](#detailed-budget--bill-of-materials)
-
-<p align="center">
-  <img src="./docs/images/orthosense-hero.png" alt="OrthoSense Project Banner" width="550" />
-</p>
-
-<p align="center">
-  <strong>An Edge-AI & IoT Healthcare Platform for Real-Time Knee Rehabilitation and Fault-Tolerant Biomechanical Assessment</strong>
-</p>
-
-<p align="center">
-  <a href="https://cepdnaclk.github.io/e22-3yp-project-OrthoSense/"><strong>Explore the Project Documentation &raquo;</strong></a>
-  <br />
-  <a href="#clinical-background--the-real-world-problem">Clinical Problem</a> &bull;
-  <a href="#the-orthosense-paradigm">Proposed Solution</a> &bull;
-  <a href="#solution-architecture">System Architecture</a> &bull;
-  <a href="#dependability--fault-tolerance-strategy">Fault-Tolerance</a> &bull;
-  <a href="#detailed-budget--bill-of-materials">BOM & Budget</a> &bull;
-  <a href="#team-organization--work-breakdown-structure">Team 12</a>
-</p>
+> **Document Purpose:** Consolidated register of all external references, official documentation, datasheets, and internal project documents used throughout the OrthoSense implementation plan.
+>
+> **Last Updated:** 2026-11-04
 
 ---
 
 ## Table of Contents
-1. [Executive Summary](#executive-summary)
-2. [Clinical Background & The Real-World Problem](#clinical-background--the-real-world-problem)
-3. [The OrthoSense Paradigm & Viability Benchmark](#the-orthosense-paradigm--viability-benchmark)
-4. [Solution Architecture](#solution-architecture)
-   - [High-Level Data and Control Flow](#high-level-data-and-control-flow)
-   - [Layered System Organization](#layered-system-organization)
-   - [Closed-Loop Control & Decision Hierarchy](#closed-loop-control--decision-hierarchy)
-5. [Hardware & Software Design](#hardware--software-design)
-   - [Wearable Sensor Suite](#wearable-sensor-suite)
-   - [Edge Processing & TinyML (ESP32-S3)](#edge-processing--tinyml-esp32-s3)
-   - [Cloud Backend & Clinician Dashboard](#cloud-backend--clinician-dashboard)
-6. [Dependability & Fault-Tolerance Strategy](#dependability--fault-tolerance-strategy)
-7. [Security, Privacy & Ethical Compliance](#security-privacy--ethical-compliance)
-8. [Testing & Demonstration Plan](#testing--demonstration-plan)
-9. [Detailed Budget & Bill of Materials](#detailed-budget--bill-of-materials)
-10. [13-Week Implementation Roadmap](#13-week-implementation-roadmap)
-11. [Team Organization & Work Breakdown Structure](#team-organization--work-breakdown-structure)
-12. [Repository Structure & Getting Started](#repository-structure--getting-started)
-13. [Links & Acknowledgments](#links--acknowledgments)
+
+1. [Web Portal References](#1-web-portal-references)
+2. [Backend References](#2-backend-references)
+3. [Hardware References](#3-hardware-references)
+4. [TinyML References](#4-tinyml-references)
+5. [Data and Interoperability References](#5-data-and-interoperability-references)
+6. [Project Documents (Internal)](#6-project-documents-internal)
+7. [Source Register](#7-source-register)
+8. [Important Warnings and Clarifications](#8-important-warnings-and-clarifications)
 
 ---
 
-## Executive Summary
+## 1. Web Portal References
 
-Orthopedic recovery following major knee surgery (such as Anterior Cruciate Ligament reconstruction, meniscus repair, and total knee arthroplasty) requires 6–12 months of structured rehabilitation. During the critical **2 to 4 weeks post-surgery**, soft-tissue graft vascularization occurs, making the joint exceptionally susceptible to permanent structural damage or re-rupture from uncontrolled strain, hyperextension, or improper exercise execution.
+These references cover the Next.js-based patient/clinician web portal, its styling system, accessibility standards, and testing frameworks.
 
-Today, **over 95% of recovery exercises occur unmonitored at home**, while clinical assessments take place only once every 2–4 weeks. Orthopedic surgeons and physical therapists must rely on subjective patient self-reporting, which suffers from an error rate exceeding 60%. Meanwhile, existing research braces and commercial systems remain cost-prohibitive ($600–$2,500), track only single-axis joint angle, crash when sensors disconnect, and introduce hazardous 2–5 second cloud latency before alerting the patient.
-
-**OrthoSense** solves this clinical blind spot by introducing an ultra-low-cost (~Rs. 8,870 LKR / ~$25 USD), multimodal smart knee rehabilitation brace. Powered by an **ESP32-S3** dual-core edge processor, OrthoSense concurrently tracks the complete clinical triad: **kinematic joint angle (IMU)**, **quadriceps loading / contact pressure (FSR matrix)**, and **localized joint temperature (NTC thermistors)** alongside high-frequency impact detection. With an **on-device TinyML inference engine delivering deterministic <500ms acoustic/tactile safety trips** and a **mathematical fault-tolerant sensor re-weighting matrix**, OrthoSense protects patient grafts in real time without cloud reliance.
-
----
-
-## Clinical Background & The Real-World Problem
-
-Post-operative knee rehabilitation faces three fundamental challenges in current clinical care:
-
-1. **The Critical 4–6 Week Vascularization Window:** Following ACL reconstruction or knee arthroplasty, neovascularization occurs within the new tendon graft. Excessive mechanical shear or sudden hyperextension (>30° in Week 1) stretches or permanently ruptures the graft before it can anchor into the bone tunnels.
-2. **The 2–4 Week Unmonitored Blind Spot:** Patients leave the hospital with passive rigid braces and paper exercise sheets. They attend clinical physiotherapy sessions only once every 2 to 4 weeks. Any compensatory limping, joint effusion (swelling), or improper loading between visits goes unnoticed until irreversible damage or joint stiffness sets in.
-3. **Surgeon Reliance on Subjective Self-Recall:** More than 60% of patient self-reports regarding exercise compliance, range of motion (ROM) achievement, and pain thresholds are inaccurate or exaggerated, depriving clinicians of objective biofeedback needed to adjust rehab protocols.
+| # | Resource | URL | Notes |
+|---|----------|-----|-------|
+| 1.1 | **Next.js App Router** | <https://nextjs.org/docs/app> | Primary routing paradigm for the portal; uses React Server Components, layouts, and loading states. |
+| 1.2 | **Next.js Project Structure** | <https://nextjs.org/docs/app/getting-started/project-structure> | Canonical folder conventions (`app/`, `components/`, `lib/`, `public/`). Follow this for all portal code organization. |
+| 1.3 | **Next.js Data Security** | <https://nextjs.org/docs/app/guides/data-security> | Guidance on protecting server-only code, environment variables, and preventing client data leaks. |
+| 1.4 | **Tailwind CSS Documentation** | <https://tailwindcss.com/docs> | Utility-first CSS framework used for all portal styling. |
+| 1.5 | **WCAG 2.2 Guidelines** | <https://www.w3.org/TR/WCAG22/> | Web Content Accessibility Guidelines — target AA conformance for all patient-facing views. |
+| 1.6 | **NHS Design System** | <https://service-manual.nhs.uk/design-system> | Accessibility reference for healthcare UI patterns (colour contrast, typography, form design). Used as a design benchmark, not as a required compliance target. |
+| 1.7 | **React Testing Library** | <https://testing-library.com/docs/react-testing-library/intro/> | Component-level testing framework for React; tests user-facing behaviour rather than implementation details. |
+| 1.8 | **Playwright** | <https://playwright.dev/docs/intro> | End-to-end browser testing for critical user flows (login, dashboard load, report generation). |
 
 ---
 
-## The OrthoSense Paradigm & Viability Benchmark
+## 2. Backend References
 
-OrthoSense bridges this gap through four core engineering innovations:
-- **Clinically Appropriate Triad:** Simultaneous tracking of Range of Motion (6-axis IMU), Patellar/Contact Pressure (FSR matrix), and Thermal Swelling Index (NTC thermistor array).
-- **Deterministic Edge Safety Cut-Off:** Instant (<500ms) on-brace buzzer and vibration alerts trip whenever prescribed limits are breached—completely offline with zero cloud dependency.
-- **Graceful Fault Tolerance:** Dynamic mathematical sensor re-weighting isolates disconnected, slipping, or saturated sensors in real time without firmware crashes or reboots.
-- **Extreme Cost-Effectiveness:** Fully fabricated prototype built for **Rs. 8,870 LKR (~$25 USD)** compared to $600–$2,500 commercial alternatives.
+These references cover the Django REST Framework API backend, its database, and deployment practices.
 
-<p align="center">
-  <img src="./docs/images/viability-benchmark.png" alt="OrthoSense Solution Viability Benchmark" width="600" />
-</p>
-
-| Parameter | Standard Care | Commercial Braces | OrthoSense (Team 12) |
-| :--- | :--- | :--- | :--- |
-| **Monitoring Type** | Intermittent (clinic visits every 2–4 wks) | Angle only (single IMU or potentiometer) | **Continuous Triad** (Kinematics + Pressure + Temperature) |
-| **Safety Trip Latency** | None (Post-injury assessment) | 2–5 seconds (Cloud-dependent roundtrip) | **<500 ms Deterministic On-Brace Safety Cut-Off** |
-| **Sensor Redundancy** | None | Fragile (Firmware freezes upon sensor fault) | **Dynamic Fault-Tolerant Re-Weighting Matrix** |
-| **Hardware Prototype Cost**| Free (Subjective recall only) | $600 – $2,500 USD | **< Rs. 8,870 LKR (~$25 USD)** |
+| # | Resource | URL | Notes |
+|---|----------|-----|-------|
+| 2.1 | **Django 5.2 Documentation** | <https://docs.djangoproject.com/en/5.2/> | Core framework documentation for models, views, middleware, and admin. |
+| 2.2 | **Django REST Framework** | <https://www.django-rest-framework.org/> | Serializers, viewsets, routers, authentication, and pagination for the REST API. |
+| 2.3 | **DRF Permissions** | <https://www.django-rest-framework.org/api-guide/permissions/> | Role-based access control implementation (Patient, Clinician, Admin). |
+| 2.4 | **Django Deployment Checklist** | <https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/> | Security and performance checklist — must be completed before any production deployment. |
+| 2.5 | **drf-spectacular (OpenAPI)** | <https://drf-spectacular.readthedocs.io/> | Auto-generates OpenAPI 3.x schema from DRF views; used for API documentation and contract testing. |
+| 2.6 | **pytest-django** | <https://pytest-django.readthedocs.io/> | Django-aware pytest plugin for model tests, view tests, and database fixtures. |
+| 2.7 | **PostgreSQL 16 Documentation** | <https://www.postgresql.org/docs/16/> | Production database engine; reference for indexing, JSONB, partitioning, and performance tuning. |
 
 ---
 
-## Solution Architecture
+## 3. Hardware References
 
-### High-Level Data and Control Flow
+These references cover the ESP32-S3 edge device, motion sensors, power regulation, and simulation tools.
 
-<p align="center">
-  <img src="./docs/images/system-architecture.png" alt="OrthoSense End-to-End Data and Control Flow" width="850" />
-</p>
-
-The OrthoSense platform operates across an interconnected, closed-loop pipeline:
-1. **Multimodal Sensing:** FSR sensors, flex strips, 6-axis IMU, NTC thermistors, and piezo impact sensors continuously capture biomechanical parameters at 1Hz to 100Hz.
-2. **Edge Processing (ESP32-S3):** Signals pass through digital Butterworth noise filtering, kinematic complementary sensor fusion, dynamic fault-tolerance evaluation, and quantized TinyML movement classification.
-3. **Deterministic Safety Intervention:** If an unsafe kinematic state, excessive patellar pressure (>80N), or hyperextension is detected, the on-brace active buzzer and vibration motor fire within <500ms.
-4. **Wireless Telemetry Uplink:** Validated exercise metrics and summarized events are transmitted over BLE 5.0 (with Wi-Fi fallback) to a local mobile gateway/cache.
-5. **Cloud Analytics & Storage:** Ingested into a Django/FastAPI backend backed by a PostgreSQL / Timescale time-series database.
-6. **Clinician Web Dashboard:** Physical therapists and orthopedic surgeons review objective ROM curves, repetition quality, swelling trends, and automated compliance reports in a React interface.
-
-### Layered System Organization
-
-<p align="center">
-  <img src="./docs/images/tech-stack-infrastructure.png" alt="OrthoSense Layered Technology Stack" width="850" />
-</p>
-
-The architecture is partitioned into four distinct layers:
-
-```
-+-----------------------------------------------------------------------------------+
-| LAYER 1: WEARABLE HARDWARE LAYER                                                  |
-| - MPU6050 (6-Axis IMU)      - FSR402 Pressure Array (3x)   - NTC Thermistors (4x) |
-| - Flex / Strain Strips       - Piezo Vibration / Impact     - 16-Bit Precision ADC |
-| - CD74HC4067 Multiplexer     - Neoprene Knee Sleeve          - 18650 Li-ion + BMS   |
-+-----------------------------------------+-----------------------------------------+
-                                          | Analog / I2C / SPI
-+-----------------------------------------v-----------------------------------------+
-| LAYER 2: EDGE PROCESSING LAYER (ESP32-S3 @ 240MHz Xtensa LX7)                     |
-| - Core 0: 50Hz Sensor Acquisition, 15Hz Butterworth Filter, IMU Kinematic Fusion  |
-| - Core 1: Dynamic Fault Re-Weighting, INT8 TFLite Micro Classifier (<40KB SRAM),  |
-|           Circular Ring Buffer (500 samples), On-Brace Acoustic/Tactile Trip     |
-+-----------------------------------------+-----------------------------------------+
-                                          | BLE 5.0 GATT (24-byte packets) / Wi-Fi
-+-----------------------------------------v-----------------------------------------+
-| LAYER 3: COMMUNICATION & GATEWAY LAYER                                            |
-| - BLE 5.0 2M PHY Uplink      - Mobile App / Gateway Node    - SQLite Local Cache  |
-| - 72-Hour Offline Storage    - AES-128 Pairing Encryption   - Wi-Fi 802.11 Fallback|
-+-----------------------------------------+-----------------------------------------+
-                                          | TLS 1.3 HTTPS / WSS WebSockets
-+-----------------------------------------v-----------------------------------------+
-| LAYER 4: CLOUD BACKEND & CLINICIAN DASHBOARD                                      |
-| - Django / FastAPI REST & WebSocket Ingestion Engine                              |
-| - PostgreSQL / TimescaleDB Encrypted Time-Series Storage (AES-256 at rest)        |
-| - React 18 / Vite Responsive Web Dashboard with Chart.js / Recharts Telemetry     |
-| - Automated Weekly Compliance Scoring, Swelling Index, & PDF Clinical Reports     |
-+-----------------------------------------------------------------------------------+
-```
-
-### Closed-Loop Control & Decision Hierarchy
-
-| Decision Level | Execution Location | Latency | Clinical Function |
-| :--- | :--- | :--- | :--- |
-| **Level 1: Ultra-Fast Safety Trip** | ESP32-S3 Edge Node | **< 500 ms** | Triggers buzzer & tactile cut-off if knee angle exceeds prescribed weekly ROM (e.g., >30° in Week 1) or contact force > 80N. Prevents graft failure. |
-| **Level 2: Adaptive Fault Tolerance** | ESP32-S3 Edge Node | **< 100 ms** | Detects open circuits, disconnections, or sensor saturation. Re-weights healthy sensor matrix dynamically and notifies patient on OLED. |
-| **Level 3: Exercise Repetition Validation** | Mobile Gateway App | **< 1 s** | Evaluates exercise cadence, angular velocity, and peak extension. Increments valid reps and delivers real-time voice coaching prompts. |
-| **Level 4: Protocol Progression** | Cloud Backend | **Batch / Weekly** | Computes multi-day adherence and joint swelling trends. Recommends stage progression (e.g., Stage 1 passive ROM &rarr; Stage 2 active flexion). |
+| # | Resource | URL | Notes |
+|---|----------|-----|-------|
+| 3.1 | **ESP32-S3 Technical Reference Manual** | <https://www.espressif.com/sites/default/files/documentation/esp32-s3_technical_reference_manual_en.pdf> | Authoritative hardware reference: GPIO, ADC, I²C, SPI, memory map, power modes. |
+| 3.2 | **ESP-IDF Programming Guide** | <https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/> | Official Espressif IoT Development Framework; covers FreeRTOS integration, BLE, Wi-Fi, OTA, and deep sleep. |
+| 3.3 | **MPU6050 Datasheet** | <https://invensense.tdk.com/products/motion-tracking/6-axis/mpu-6050/> | 6-axis IMU (3-axis accelerometer + 3-axis gyroscope). Primary motion sensor for joint angle measurement. |
+| 3.4 | **ADXL345 Datasheet** | <https://www.analog.com/en/products/adxl345.html> | 3-axis digital accelerometer. Supplementary sensor — **accelerometer only, no gyroscope** (see [warnings](#8-important-warnings-and-clarifications)). |
+| 3.5 | **MP1584 Manufacturer Page** | <https://www.monolithicpower.com/en/products/power-management/switching-converters-controllers/step-down-buck/converters/mp1584.html> | Step-down (buck) DC-DC converter module. Regulates input voltage to a stable output for the ESP32-S3. |
+| 3.6 | **LM2596 Manufacturer Page** | <https://www.ti.com/product/LM2596> | Step-down (buck) DC-DC converter IC. Alternative voltage regulator option for the power subsystem. |
+| 3.7 | **Wokwi Simulator** | <https://wokwi.com/> | Browser-based hardware simulator for ESP32 firmware development and logic testing. |
+| 3.8 | **Wokwi Analog Limitations** | <https://docs.wokwi.com/parts/wokwi-potentiometer> | Documents what Wokwi can and cannot simulate — analog behaviour and battery circuits are **not** accurately modelled. |
+| 3.9 | **Arduino-ESP32 Core** | <https://docs.espressif.com/projects/arduino-esp32/en/latest/> | Arduino framework port for ESP32; used for rapid prototyping with `Wire.h`, `WiFi.h`, and sensor libraries. |
 
 ---
 
-## Hardware & Software Design
+## 4. TinyML References
 
-### Wearable Sensor Suite
+These references cover on-device machine learning inference for real-time posture and motion classification.
 
-- **Joint Kinematics (GY-521 / MPU6050 6-Axis IMU):** Sampled at 50Hz; captures 3-axis angular rates and accelerations along femur and tibia segments to calculate flexion/extension angles with <3° accuracy after complementary filtering.
-- **Quadriceps Loading & Contact Pressure (FSR402):** 3 thin-film force-sensing resistors sampled at 20Hz across the patellar tendon, medial joint line, and lateral joint line (100g to 10kg force range).
-- **Localized Joint Swelling Index (NTC MF52 10kΩ Thermistors):** 4 thermistors (1% precision) sampled at 1Hz comparing bilateral knee temperature against ambient temperature to detect inflammatory flare-ups.
-- **High-Frequency Shock & Clicking (Piezo Vibration Sensor):** 100Hz burst sampling to identify mechanical joint clicking, subluxation, or abrupt stumble impacts.
-- **Signal Conditioning & Multiplexing:** CD74HC4067 16-channel analog multiplexer combined with a 16-bit high-precision ADC to achieve ultra-low analog noise.
-- **Power Management:** 18650 rechargeable Li-ion cells with integrated TP4056/BMS protection circuitry, delivering >18 hours of continuous operation on BLE 5.0.
-
-### Edge Processing & TinyML (ESP32-S3)
-
-- **Compute Core:** ESP32-S3 microcontroller operating at 240MHz featuring Xtensa Vector Instructions (PIE), accelerating INT8 quantized neural network operations by 4–5x compared to standard microcontrollers.
-- **FreeRTOS Dual-Core Scheduling:** Core 0 is dedicated to high-frequency deterministic sensor sampling (50Hz) and digital filtering; Core 1 handles BLE communication, fault re-weighting, and TinyML inference.
-- **Digital Butterworth Filter:** 2nd-order 15Hz low-pass filter eliminates baseline tremor, movement artifacts, and 50Hz mains power hum.
-- **Kinematic Complementary Fusion:** Fuses accelerometer gravity vectors with gyroscope angular rates, achieving drift-free angle tracking validated against manual goniometer benchmarks.
-- **TensorFlow Lite for Microcontrollers (TFLite Micro):** INT8 quantized model consuming <40KB SRAM footprint, classifying movement into:
-  1. *Normal Daily Activity* (walking, standing)
-  2. *Controlled Rehabilitation Exercise* (straight leg raises, seated heel slides)
-  3. *Hazardous Strain / Dangerous Hyperextension* (compensatory torque, abnormal shearing force)
-
-### Cloud Backend & Clinician Dashboard
-
-- **REST & WebSocket API:** Built on Python (Django / FastAPI) providing secure endpoints for session upload and real-time live telemetry streaming.
-- **Time-Series Storage:** PostgreSQL with TimescaleDB extension, partitioning kinematic angles, repetition timestamps, and temperature time-series with millisecond fidelity.
-- **Clinician Web Portal:** React frontend offering interactive angle trend graphs, 4-week rehabilitation progression tracking, patient compliance heatmaps, and one-click PDF clinical report generation.
+| # | Resource | URL | Notes |
+|---|----------|-----|-------|
+| 4.1 | **TensorFlow Lite for Microcontrollers** | <https://www.tensorflow.org/lite/microcontrollers> | Runtime for deploying quantized ML models on resource-constrained devices (ESP32-S3). |
+| 4.2 | **esp-tflite-micro (Espressif Official)** | <https://github.com/espressif/esp-tflite-micro> | Espressif's maintained fork of TFLite Micro, optimized for ESP32-S3 with SIMD acceleration. |
+| 4.3 | **TensorFlow Lite Converter** | <https://www.tensorflow.org/lite/convert> | Converts trained Keras/TF models to `.tflite` format for deployment. |
+| 4.4 | **Post-Training Quantization** | <https://www.tensorflow.org/lite/performance/post_training_quantization> | INT8 quantization reduces model size and inference latency while maintaining acceptable accuracy. |
 
 ---
 
-## Dependability & Fault-Tolerance Strategy
+## 5. Data and Interoperability References
 
-A critical weakness of existing research prototypes is fragility: if a single sensor detaches, breaks, or saturates due to brace slippage, the firmware encounters divide-by-zero or NaN states, freezing the system. OrthoSense integrates an on-chip **Dynamic Sensor Health & Re-Weighting Algorithm**:
+These references cover healthcare data standards and API specification formats for future integration readiness.
 
-<p align="center">
-  <img src="./docs/images/fault-tolerance-strategy.png" alt="OrthoSense Dynamic Fault-Tolerant Re-Weighting Decision Flow" width="750" />
-</p>
+| # | Resource | URL | Notes |
+|---|----------|-----|-------|
+| 5.1 | **HL7 FHIR Observation (R5)** | <https://hl7.org/fhir/R5/observation-profiles.html> | Standard resource for representing clinical measurements. Target schema for ROM and angle data export. |
+| 5.2 | **HL7 FHIR Device (R5)** | <https://hl7.org/fhir/R5/device.html> | Standard resource for representing medical devices. Maps to the OrthoSense edge hardware identity. |
+| 5.3 | **OpenAPI Specification 3.1** | <https://spec.openapis.org/oas/v3.1.0> | API contract format; generated by drf-spectacular and consumed by the Next.js portal for type-safe API calls. |
 
-### Decision Flow Formulation
-1. **Variance & Health Inspection:** Over a rolling sliding window of $N = 50$ samples, the edge node computes the variance $\sigma_i^2$ and bounds for each sensor $S_i$:
-   $$\sigma_i^2 = \frac{1}{N} \sum_{k=1}^{N} (x_{i}[k] - \mu_i)^2$$
-2. **Anomaly Classification:**
-   - If $\sigma_i^2 < \epsilon_{min}$ (flatline/open circuit) OR $x_i > V_{sat}$ (saturation/short circuit), mark sensor $S_i$ as **UNHEALTHY**.
-   - If IMU angular acceleration does not correlate with FSR pressure shifts over 10 consecutive cycles, mark sensor as **SLIPPED**.
-3. **Dynamic Re-Weighting:** 
-   The unhealthy sensor weight is immediately set to zero ($W_i = 0$). The system redistributes full mathematical weight across the remaining $N_{active}$ operational sensors:
-   $$W_k = \frac{100\%}{N_{active}} \quad \forall k \in \text{Healthy Sensors}$$
-4. **Seamless Telemetry Continuity:** The rehabilitation session continues uninterrupted without requiring a system reboot or MCU reset. An alert is logged locally and mirrored to the clinician dashboard.
+> [!IMPORTANT]
+> FHIR references (5.1, 5.2) are included for **future interoperability design** only. The current implementation does not claim FHIR compliance or clinical system integration.
 
 ---
 
-## Security, Privacy & Ethical Compliance
+## 6. Project Documents (Internal)
 
-Medical telemetry demands stringent security and patient privacy safeguards:
+These are internal planning and specification documents produced during the OrthoSense project lifecycle.
 
-- **Hardware & Firmware Security:** ESP32-S3 hardware Secure Boot and Flash Encryption prevent firmware reverse-engineering or memory tampering.
-- **Zero Plaintext PII on Brace:** The wearable brace processes and transmits only raw anonymous sensor floats and event tokens—never patient names, national IDs, or demographic records.
-- **BLE Transmission Privacy:** AES-128 encryption key exchange during Bluetooth bonding blocks air-sniffing. Randomized BLE private MAC addresses prevent tracking patient movements via external BLE beacons.
-- **Transport & Storage Encryption:** TLS 1.3 encryption with certificate pinning for all REST and WebSocket connections. Database tables utilize AES-256 encryption at rest with GUID pseudonyms aligned with HIPAA and GDPR guidelines.
-- **Role-Based Access Control (RBAC):** JWT authentication partitions clinician and patient portals; surgeons can adjust ROM safety thresholds, while patients access guided exercise coaching.
-- **Immutable Audit Logging:** Every clinician modification to prescribed limits and every raw data export is permanently recorded with microsecond timestamps.
-
----
-
-## Testing & Demonstration Plan
-
-The OrthoSense validation plan spans three rigorous evaluation stages:
-
-<p align="center">
-  <img src="./docs/images/clinical-problem-3.png" alt="Clinical Validation and Rehabilitation Exercises" width="600" />
-</p>
-
-| Stage | Benchmark Target | Verification Method |
-| :--- | :--- | :--- |
-| **Milestone 2: Benchtop Sensor Precision** | Joint Angle Error $< 3.0^\circ$ <br> FSR Linearity $R^2 > 0.95$ | Static weight calibration on FSRs (100g–10kg); NTC thermal calibration against medical-grade infrared thermometer; IMU joint angle validation against physical manual goniometer. |
-| **Milestone 3: Fault Stress & Safety Latency** | Zero MCU Crashes <br> Buzzer Trip $< 500 \text{ ms}$ | Simulated open-circuit and disconnected sensor stress tests; dynamic re-weighting matrix verification without MCU reset; oscilloscope-timed emergency trip latency upon joint hyperextension. |
-| **Milestone 4: End-to-End Rehab Emulation** | 100% Packet Delivery <br> Automated PDF Export | Full guided rehabilitation workout sessions on physical wearable knee brace; real-time BLE 5.0 telemetry ingestion into PostgreSQL; clinician report generation and alert dispatch. |
+| # | Document | Location | Description |
+|---|----------|----------|-------------|
+| 6.1 | **Phase 0 Product Specification** | [`PHASE_0_PRODUCT_SPEC.md`](file:///D:/3yp/planning_packages/docs/PHASE_0_PRODUCT_SPEC.md) | Original product vision, scope boundaries, user personas, and system-level requirements. |
+| 6.2 | **Data Model and API Contracts** | [`DATA_MODEL_AND_API_CONTRACTS.md`](file:///D:/3yp/planning_packages/docs/DATA_MODEL_AND_API_CONTRACTS.md) | Database schema definitions, entity relationships, and REST API endpoint contracts. |
+| 6.3 | **Routes and Permissions** | [`ROUTES_AND_PERMISSIONS.md`](file:///D:/3yp/planning_packages/docs/ROUTES_AND_PERMISSIONS.md) | URL route definitions and role-based permission matrix for all API endpoints and portal pages. |
+| 6.4 | **Acceptance Criteria** | [`ACCEPTANCE_CRITERIA.md`](file:///D:/3yp/planning_packages/docs/ACCEPTANCE_CRITERIA.md) | Detailed acceptance criteria for all user stories, organized by feature area. |
+| 6.5 | **Phase 1 Handoff** | [`PHASE_1_HANDOFF.md`](file:///D:/3yp/planning_packages/docs/PHASE_1_HANDOFF.md) | Handoff document summarizing Phase 1 deliverables, known issues, and Phase 2 prerequisites. |
+| 6.6 | **Component Purchase Document** | *(Physical / photographic evidence)* | Photographs of purchased hardware components serve as procurement evidence. No standalone digital document. |
+| 6.7 | **Existing Edge Firmware** | [`sketch.ino`](file:///D:/clone/pyqt/e22-3yp-project-OrthoSense/edge/sketch.ino) + [`health.h`](file:///D:/clone/pyqt/e22-3yp-project-OrthoSense/edge/health.h) | Current ESP32 firmware: sensor reading, BLE transmission, and device health monitoring. |
 
 ---
 
-## Detailed Budget & Bill of Materials
+## 7. Source Register
 
-The entire prototype has been designed to strictly respect student project budget guidelines, maintaining total out-of-pocket costs well below the $35 USD (~10,000 LKR) limit:
+Consolidated table of all referenced sources with classification and current status.
 
-| # | Component Description | Qty | Source / Inventory Status | Unit Price (LKR) | Subtotal (LKR) |
-| :-: | :--- | :-: | :--- | :-: | -: |
-| 1 | **ESP32-S3 Nano Dev Board** (Waveshare 8MB PSRAM) | 1 | Tronic.lk (Procured) | Rs. 4,400.00 | Rs. 4,400.00 |
-| 2 | **FSR402 Thin-Film Pressure Sensors** (100g–10kg) | 3 | Tronic.lk (Procured) | Rs. 950.00 | Rs. 2,850.00 |
-| 3 | **NTC MF52 10kΩ Thermistors** (1% Precision) | 4 | Tronic.lk (Procured) | Rs. 30.00 | Rs. 120.00 |
-| 4 | **GY-521 / MPU6050 6-Axis IMU Module** | 3 | Department Inventory (Item #73) | Free (Dept Stock) | Rs. 0.00 |
-| 5 | **16-Bit High-Precision ADC Board** | 1 | Department Inventory (Item #10) | Free (Dept Stock) | Rs. 0.00 |
-| 6 | **0.96-inch OLED Display** (I2C 128&times;64) | 4 | Department Inventory (Item #71) | Free (Dept Stock) | Rs. 0.00 |
-| 7 | **18650 Li-ion Battery Cells + BMS Board** | 2+1 | Department Inventory (Items #117, #99) | Free (Dept Stock) | Rs. 0.00 |
-| 8 | **Active Buzzer + Piezo Sensor Modules** | 1+1 | Department Inventory (Items #31, #21) | Free (Dept Stock) | Rs. 0.00 |
-| 9 | **Knee Brace Sleeve Fabric + Velcro Straps** | 1 | Local Market (Procured) | Rs. 1,500.00 | Rs. 1,500.00 |
-| | **TOTAL ELECTRONICS OUTLAY** | | | | **Rs. 7,370.00** |
-| | **GRAND TOTAL (WITH WEARABLE SLEEVE)** | | | | **Rs. 8,870.00 (~$25 USD)** |
+| # | Source | Type | Location | Purpose | Status |
+|---|--------|------|----------|---------|--------|
+| 1 | Next.js App Router Docs | Official Docs | External URL | Portal routing architecture | Active |
+| 2 | Next.js Project Structure | Official Docs | External URL | Code organization standard | Active |
+| 3 | Next.js Data Security Guide | Official Docs | External URL | Server-side data protection | Active |
+| 4 | Tailwind CSS Docs | Framework | External URL | Portal UI styling | Active |
+| 5 | WCAG 2.2 | Standard | External URL | Accessibility compliance target | Active |
+| 6 | NHS Design System | Reference | External URL | Healthcare accessibility patterns | Reference Only |
+| 7 | Django 5.2 Docs | Official Docs | External URL | Backend framework | Active |
+| 8 | Django REST Framework | Framework | External URL | REST API implementation | Active |
+| 9 | DRF Permissions Guide | Official Docs | External URL | Role-based access control | Active |
+| 10 | Django Deployment Checklist | Official Docs | External URL | Production security review | Active |
+| 11 | drf-spectacular | Tool | External URL | OpenAPI schema generation | Active |
+| 12 | PostgreSQL 16 Docs | Official Docs | External URL | Database engine reference | Active |
+| 13 | ESP32-S3 Technical Reference | Datasheet | External PDF | Microcontroller hardware spec | Active |
+| 14 | ESP-IDF Programming Guide | Official Docs | External URL | Firmware development framework | Active |
+| 15 | MPU6050 Product Page | Datasheet | External URL | Primary IMU sensor specification | Active |
+| 16 | ADXL345 Product Page | Datasheet | External URL | Supplementary accelerometer spec | Active |
+| 17 | MP1584 Manufacturer Page | Datasheet | External URL | DC-DC buck converter spec | Reference Only |
+| 18 | LM2596 Manufacturer Page | Datasheet | External URL | DC-DC buck converter spec | Reference Only |
+| 19 | Wokwi Simulator | Tool | External URL | Firmware logic simulation | Active |
+| 20 | TensorFlow Lite Micro | Official Docs | External URL | On-device ML inference | Active |
+| 21 | esp-tflite-micro | Framework | GitHub Repo | ESP32-optimized TFLite runtime | Active |
+| 22 | TFLite Converter | Tool | External URL | Model format conversion | Active |
+| 23 | Post-Training Quantization | Official Docs | External URL | Model size/latency optimization | Active |
+| 24 | HL7 FHIR Observation (R5) | Standard | External URL | Future data interoperability | Reference Only |
+| 25 | HL7 FHIR Device (R5) | Standard | External URL | Future device identification | Reference Only |
+| 26 | OpenAPI Specification 3.1 | Standard | External URL | API contract format | Active |
+| 27 | Phase 0 Product Spec | Internal Doc | Local filesystem | Project scope and requirements | Active |
+| 28 | Data Model & API Contracts | Internal Doc | Local filesystem | Schema and endpoint definitions | Active |
+| 29 | Routes and Permissions | Internal Doc | Local filesystem | Access control matrix | Active |
+| 30 | Acceptance Criteria | Internal Doc | Local filesystem | Feature validation criteria | Active |
+| 31 | Phase 1 Handoff | Internal Doc | Local filesystem | Phase transition deliverables | Active |
+| 32 | Edge Firmware (sketch.ino) | Internal Doc | Main repo | Current device firmware | To Verify |
 
----
-
-## 13-Week Implementation Roadmap
-
-<p align="center">
-  <img src="./docs/images/implementation-roadmap.png" alt="OrthoSense 13-Week Implementation Roadmap" width="850" />
-</p>
-
-The project progresses systematically across four development phases and four major milestones:
-
-- **Phase 1: Hardware Procurement & Circuit Design (Weeks 1–4) &rarr; `Milestone 1`**
-  - Component acquisition from Tronic.lk and department inventory.
-  - Sensor signal conditioning, analog multiplexing, and breadboard prototype fabrication.
-  - Initial sensor calibration and static benchtop load testing.
-- **Phase 2: Firmware & Baseline Calibration (Weeks 4–7) &rarr; `Milestone 2`**
-  - Multi-core FreeRTOS firmware implementation on ESP32-S3.
-  - 15Hz digital Butterworth noise filter and complementary IMU kinematic fusion.
-  - Baseline BLE 5.0 GATT telemetry streaming.
-- **Phase 3: TinyML & Fault-Tolerance (Weeks 7–10) &rarr; `Milestone 3`**
-  - Movement dataset collection and quantized TensorFlow Lite Micro model training.
-  - Implementation and stress testing of dynamic fault-tolerant sensor re-weighting.
-  - Benchmarking of emergency safety buzzer trip latency (<500ms).
-- **Phase 4: Cloud, Dashboard & Testing (Weeks 10–13) &rarr; `Milestone 4`**
-  - Django / FastAPI cloud backend and PostgreSQL time-series schema deployment.
-  - React clinician web dashboard with interactive charts and automated alert feeds.
-  - Full end-to-end rehabilitation emulation across a 4-week protocol.
-
----
-
-## Team Organization & Work Breakdown Structure
-
-OrthoSense is developed by **Team 12** from the Department of Computer Engineering, University of Peradeniya:
-
-| Member | Role | Core Technical Focus & WBS Areas | ePortfolio |
-| :--- | :--- | :--- | :---: |
-| **M.F.M. Minhaj Ali**<br>`E/22/237`<br>[e22237@eng.pdn.ac.lk](mailto:e22237@eng.pdn.ac.lk) | **Team Leader** | &bull; TinyML INT8 quantization & deployment (<40KB SRAM)<br>&bull; ESP32-S3 FreeRTOS dual-core task scheduling<br>&bull; System integration & edge safety trip control loop | [ePortfolio](https://www.thecn.com/MM4918) |
-| **K.D. Ashen**<br>`E/22/032`<br>[e22032@eng.pdn.ac.lk](mailto:e22032@eng.pdn.ac.lk) | **Product Owner** | &bull; Analog circuit design (16-bit ADC & CD74HC4067 multiplexer)<br>&bull; Power architecture (18650 Li-ion, BMS & TP4056)<br>&bull; Mechanical fabrication of neoprene sleeve & sensor mounts | [ePortfolio](https://www.thecn.com/DA1139) |
-| **W.M.S. Manujitha**<br>`E/22/228`<br>[e22228@eng.pdn.ac.lk](mailto:e22228@eng.pdn.ac.lk) | **Developer** | &bull; Django / FastAPI REST & WebSocket backend services<br>&bull; PostgreSQL / TimescaleDB time-series database design<br>&bull; React clinician web dashboard with live ROM trend analytics | [ePortfolio](https://www.thecn.com/WM443) |
-| **H.C.V. Perera**<br>`E/22/280`<br>[e22280@eng.pdn.ac.lk](mailto:e22280@eng.pdn.ac.lk) | **Developer** | &bull; Kinematic IMU sensor fusion (complementary filter / EKF)<br>&bull; 2nd-order 15Hz Butterworth digital noise filter<br>&bull; Dynamic sensor variance tracker & re-weighting matrix | [ePortfolio](https://www.thecn.com/HP638) |
+> [!NOTE]
+> **Status Definitions:**
+> - **Active** — Currently used in implementation; must stay up to date.
+> - **Reference Only** — Consulted for design decisions but not a direct dependency.
+> - **To Verify** — Requires review to confirm alignment with current implementation plan.
 
 ---
 
-## Repository Structure & Getting Started
+## 8. Important Warnings and Clarifications
 
-```
-e22-3yp-project-OrthoSense/
-├── README.md                  # Main repository technical overview
-├── code/                      # Firmware, backend, and dashboard source files
-│   ├── firmware/              # ESP32-S3 FreeRTOS & TinyML C++ firmware
-│   ├── backend/               # Django / FastAPI cloud telemetry service
-│   └── dashboard/             # React / Vite clinician web dashboard
-└── docs/                      # GitHub Pages documentation & Jekyll website
-    ├── README.md              # Project documentation home page
-    ├── _config.yml            # Jekyll configuration file
-    ├── data/
-    │   └── index.json         # Department project catalog metadata
-    └── images/                # Architecture diagrams, flowcharts, and media assets
-        ├── orthosense-hero.png
-        ├── system-architecture.png
-        ├── tech-stack-infrastructure.png
-        ├── fault-tolerance-strategy.png
-        ├── implementation-roadmap.png
-        └── viability-benchmark.png
-```
+> [!CAUTION]
+> The following clarifications prevent common misunderstandings about hardware components, simulation accuracy, and standards compliance in this project.
 
-### Quick Start Instructions
+### 8.1 Power Components Are NOT ADCs or Battery Chargers
 
-1. **Firmware (ESP32-S3):**
-   - Built with [ESP-IDF v5.x](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/) or [PlatformIO](https://platformio.org/).
-   - Connect the ESP32-S3 board via USB-C and run:
-     ```bash
-     cd code/firmware
-     pio run -t upload
-     ```
-2. **Cloud Backend:**
-   - Requires Python 3.10+ and PostgreSQL.
-   - Run migrations and start development server:
-     ```bash
-     cd code/backend
-     python -m venv venv && source venv/bin/activate
-     pip install -r requirements.txt
-     python manage.py migrate
-     python manage.py runserver
-     ```
-3. **Clinician Dashboard:**
-   - Node.js 18+ required:
-     ```bash
-     cd code/dashboard
-     npm install
-     npm run dev
-     ```
+The **MP1584** and **LM2596** are **step-down (buck) DC-DC converters**. Their sole function is to regulate a higher input voltage down to a stable lower output voltage for the ESP32-S3 and sensor modules.
+
+- ❌ They are **not** analog-to-digital converters (ADCs)
+- ❌ They are **not** battery charging ICs
+- ❌ They do **not** provide battery level monitoring
+- ✅ They **only** perform voltage step-down regulation
+
+### 8.2 ADXL345 Cannot Replace MPU6050 in Fusion Algorithms
+
+The **ADXL345** is a **3-axis accelerometer only**. It does **not** contain a gyroscope.
+
+- Sensor fusion algorithms (complementary filter, Madgwick, Kalman) require **both** accelerometer and gyroscope data
+- The ADXL345 **cannot** be used as a drop-in replacement for the MPU6050 in any algorithm that requires angular velocity measurements
+- It may serve as a supplementary accelerometer for specific placement points where gyroscope data is not needed
+
+### 8.3 Wokwi Validates Logic, NOT Analog Behaviour
+
+The **Wokwi simulator** is used to validate firmware control flow, I²C communication sequences, and BLE state machines.
+
+- ❌ Wokwi does **not** accurately model analog circuits, battery discharge curves, or voltage regulator behaviour
+- ❌ Wokwi does **not** simulate real-world noise, EMI, or signal integrity issues
+- ❌ Wokwi potentiometers approximate analog inputs but do **not** replicate NTC thermistor nonlinear response
+- ✅ All analog and power-related behaviour **must** be validated on physical hardware
+
+### 8.4 Simulated NTC Thermistor Beta Requires Physical Verification
+
+The firmware uses a **beta constant of 3950** for NTC thermistor temperature calculations (Steinhart-Hart / B-parameter equation). This value:
+
+- Is a common nominal value but varies between manufacturers and component lots
+- **Must** be verified against the actual physical thermistor's datasheet and, ideally, a calibrated temperature reference
+- Simulated temperature readings in Wokwi are approximations only
+
+### 8.5 FHIR References Are for Future Interoperability
+
+References to **HL7 FHIR R5** resources (Observation, Device) are included to:
+
+- Guide data model design toward future healthcare system interoperability
+- Inform field naming and structure conventions
+
+They do **not** imply:
+
+- ❌ Current FHIR compliance or conformance
+- ❌ Integration with any existing clinical information system
+- ❌ Certification or validation against FHIR Implementation Guides
+
+### 8.6 No Claim of Clinical Validation or Regulatory Approval
+
+OrthoSense is a **university research project**. The system:
+
+- ❌ Has **not** undergone clinical validation trials
+- ❌ Does **not** hold any medical device regulatory approval (FDA, CE marking, etc.)
+- ❌ Should **not** be used for clinical decision-making without independent professional validation
+- ✅ Is intended as a **research prototype** for exploring IoT-based rehabilitation monitoring
 
 ---
 
-## Links & Acknowledgments
-
-- **Project Repository:** [https://github.com/cepdnaclk/e22-3yp-project-OrthoSense](https://github.com/cepdnaclk/e22-3yp-project-OrthoSense)
-- **Project Documentation Page:** [https://cepdnaclk.github.io/e22-3yp-project-OrthoSense/](https://cepdnaclk.github.io/e22-3yp-project-OrthoSense/)
-- **Department Project Portal:** [https://projects.ce.pdn.ac.lk/](https://projects.ce.pdn.ac.lk/)
-- **Department of Computer Engineering:** [http://www.ce.pdn.ac.lk/](http://www.ce.pdn.ac.lk/)
-- **Faculty of Engineering, University of Peradeniya:** [https://eng.pdn.ac.lk/](https://eng.pdn.ac.lk/)
-
----
-*OrthoSense &copy; 2026 Team 12 &bull; Department of Computer Engineering, University of Peradeniya.*
-=======
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
-
-## Getting Started
-
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
->>>>>>> master
+*This document is maintained as part of the OrthoSense implementation plan. All URLs were verified at the time of document creation. External links may change; verify against the source register if a link becomes unavailable.*
