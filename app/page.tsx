@@ -25,6 +25,14 @@ export default function HomePage() {
         {/* Banner */}
         <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs relative overflow-hidden">
           <div className="max-w-2xl space-y-3 relative z-10">
+            <div className="h-12 w-fit px-3 py-1.5 rounded-xl bg-slate-900 shadow-sm border border-slate-800 flex items-center mb-1">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/images/orthosense-logo.png"
+                alt="OrthoSense Logo"
+                className="h-9 w-auto object-contain"
+              />
+            </div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-50 border border-teal-200 text-teal-800 text-xs font-semibold">
               <span className="h-2 w-2 rounded-full bg-[#0F766E] animate-pulse"></span>
               OrthoSense Continuous Rehabilitation Telemetry

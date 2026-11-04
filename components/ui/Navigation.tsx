@@ -19,6 +19,7 @@ import {
   Sliders,
   ChevronRight,
   TrendingUp,
+  UserCircle,
 } from "lucide-react";
 import { User, UserRole } from "@/lib/types";
 import { authService } from "@/lib/services/auth-service";
@@ -48,6 +49,7 @@ const NAV_ITEMS_BY_ROLE: Record<UserRole, NavItem[]> = {
     { name: "Record Live Session", href: "/patient/session/record", icon: Radio },
     { name: "Session History", href: "/patient/sessions", icon: Calendar },
     { name: "My Edge Device", href: "/patient/device", icon: Cpu },
+    { name: "My Profile", href: "/patient/profile", icon: UserCircle },
   ],
 };
 
@@ -86,24 +88,26 @@ export function Navigation({
     <>
       {/* Mobile Top Bar */}
       <header className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200 sticky top-0 z-40">
+        <Link href="/" className="flex items-center gap-2 focus:outline-hidden">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/orthosense-logo.png"
+            alt="OrthoSense Logo"
+            className="h-8 w-auto object-contain drop-shadow-[0_1px_2px_rgba(15,23,42,0.2)]"
+          />
+        </Link>
         <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-[#0F766E] flex items-center justify-center text-white font-bold">
-            OS
-          </div>
-          <span className="font-semibold text-slate-900 tracking-tight">
-            OrthoSense
-          </span>
-          <span className="text-xs uppercase font-mono px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200">
+          <span className="text-xs uppercase font-mono px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200 font-semibold">
             {role}
           </span>
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle Navigation Menu"
+            className="p-2 rounded-lg text-slate-600 hover:bg-slate-100"
+          >
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
         </div>
-        <button
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          aria-label="Toggle Navigation Menu"
-          className="p-2 rounded-lg text-slate-600 hover:bg-slate-100"
-        >
-          {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
       </header>
 
       {/* Mobile Drawer */}
@@ -111,7 +115,14 @@ export function Navigation({
         <div className="lg:hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex flex-col justify-end">
           <div className="bg-white rounded-t-2xl p-6 space-y-4 max-h-[85vh] overflow-y-auto">
             <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <span className="font-semibold text-slate-800">Workspace Navigation</span>
+              <Link href="/" onClick={() => setMobileMenuOpen(false)}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/images/orthosense-logo.png"
+                  alt="OrthoSense Logo"
+                  className="h-8 w-auto object-contain drop-shadow-[0_1px_2px_rgba(15,23,42,0.2)]"
+                />
+              </Link>
               <button
                 onClick={() => setMobileMenuOpen(false)}
                 className="p-1 rounded-md text-slate-400 hover:text-slate-600"
@@ -170,20 +181,15 @@ export function Navigation({
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-slate-200 shrink-0 sticky top-0 h-screen select-none">
         {/* Brand Header */}
-        <div className="p-6 border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-[#0F766E] flex items-center justify-center text-white font-bold shadow-xs">
-              OS
-            </div>
-            <div>
-              <span className="font-bold text-slate-900 tracking-tight block leading-tight">
-                OrthoSense
-              </span>
-              <span className="text-[11px] font-medium text-slate-500">
-                Clinical Telemetry Portal
-              </span>
-            </div>
-          </div>
+        <div className="p-5 border-b border-slate-100">
+          <Link href="/" className="group block focus:outline-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/orthosense-logo.png"
+              alt="OrthoSense Logo"
+              className="h-13 w-auto object-contain drop-shadow-[0_1px_3px_rgba(15,23,42,0.2)] transition-transform duration-200 group-hover:scale-[1.02]"
+            />
+          </Link>
         </div>
 
         {/* User Info & Role Switcher */}

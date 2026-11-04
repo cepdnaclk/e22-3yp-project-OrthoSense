@@ -36,9 +36,14 @@ export default function PrintableReportPage() {
           {/* Document Header */}
           <div className="flex justify-between items-start pb-6 border-b-2 border-slate-800">
             <div>
-              <div className="flex items-center gap-2 mb-1">
-                <div className="h-7 w-7 rounded bg-[#0F766E] text-white font-bold flex items-center justify-center text-xs">
-                  OS
+              <div className="flex items-center gap-3 mb-1">
+                <div className="h-9 w-9 rounded-xl overflow-hidden bg-slate-900 p-1.5 border border-slate-800 shrink-0 flex items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/images/orthosense-icon.png"
+                    alt="OrthoSense Logo"
+                    className="h-full w-full object-contain"
+                  />
                 </div>
                 <span className="font-extrabold text-lg tracking-tight">ORTHOSENSE CLINICAL TELEMETRY</span>
               </div>
