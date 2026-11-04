@@ -31,14 +31,14 @@ export default function PatientDashboardPage() {
             <img
               src="/images/smart-knee-brace.jpg"
               alt="Bionic-X Smart Knee Brace Telemetry"
-              className="w-full h-full object-cover object-right md:object-[80%_center] opacity-100 mix-blend-luminosity filter brightness-110 contrast-125"
+              className="w-full h-full object-cover object-right md:object-[80%_center] opacity-90 mix-blend-luminosity filter brightness-110 contrast-125"
             />
             {/* Multi-stop gradient ensuring high-contrast readability on text */}
-            <div className="absolute inset-0 bg-gradient-to-r from-[#035E54]/250 via-[#035E54]/50 to-[#035E54]/0" />
+            <div className="absolute inset-0 bg-gradient-to-r from-[#035E54] via-[#035E54]/85 to-transparent" />
           </div>
 
           {/* Banner Content (Elevated with Z-Index and White Shadow Glow) */}
-          <div className="relative z-1000 space-y-8 p-20">
+          <div className="relative z-10 space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
               <div className="space-y-1.5 max-w-2xl">
                 <span className="text-[11px] uppercase tracking-wider font-bold text-teal-200 block drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
@@ -86,13 +86,9 @@ export default function PatientDashboardPage() {
           </div>
         </div>
 
-        {/* ========================================================= */}
-        {/* MAIN DASHBOARD 3-COLUMN GRID                              */}
-        {/* ========================================================= */}
+        
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
-          {/* ======================================================= */}
-          {/* COLUMN 1 (LEFT)                                         */}
-          {/* ======================================================= */}
+         
           <div className="space-y-5">
             {/* CARD 1: Today's Prescribed Exercises */}
             <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs hover:border-teal-400 transition-all">
@@ -849,9 +845,10 @@ export default function PatientDashboardPage() {
                   <Link href="/patient/device">
                     <Button
                       variant="outline"
-                      className="w-full text-xs font-semibold hover:border-[#0F766E] hover:text-[#0F766E]"
+                      className="w-full text-xs font-semibold hover:border-[#0F766E] hover:text-[#0F766E] flex items-center justify-center gap-1.5"
                     >
-                      Inspect Device Diagnostics →
+                      <span>Sensor Hardware Readiness Matrix</span>
+                      <span>→</span>
                     </Button>
                   </Link>
                 </div>
