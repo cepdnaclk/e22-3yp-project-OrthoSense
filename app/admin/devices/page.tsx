@@ -8,12 +8,14 @@ import { Input } from "@/components/ui/Input";
 import { Dialog } from "@/components/ui/Dialog";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { DataTable, Column } from "@/components/ui/DataTable";
-import { INITIAL_DEVICES } from "@/lib/services/mock-data";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { devicesApi } from "@/lib/services/api";
 import { Device } from "@/lib/types";
-import { Cpu, Plus, Key, Trash2, CheckCircle2, ShieldAlert } from "lucide-react";
+import { Cpu, Plus, Key, Trash2, CheckCircle2, ShieldAlert, RefreshCw } from "lucide-react";
 
 export default function AdminDevicesPage() {
-  const [devices, setDevices] = React.useState<Device[]>(INITIAL_DEVICES);
+  const [devices, setDevices] = React.useState<Device[]>([]);
+  const [loading, setLoading] = React.useState(true);
   const [provisionOpen, setProvisionOpen] = React.useState(false);
   const [revokeOpen, setRevokeOpen] = React.useState(false);
   const [selectedDevice, setSelectedDevice] = React.useState<Device | null>(null);
@@ -22,43 +24,60 @@ export default function AdminDevicesPage() {
   const [serial, setSerial] = React.useState("");
   const [mac, setMac] = React.useState("");
   const [generatedToken, setGeneratedToken] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
 
-  const handleRegisterDevice = (e: React.FormEvent) => {
+  const fetchDevices = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await devicesApi.getAll();
+      setDevices(data);
+    } catch {
+      // Keep empty if error
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchDevices();
+  }, [fetchDevices]);
+
+  const handleRegisterDevice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!serial || !mac) return;
 
-    const token = `ortho_sec_${Math.random().toString(36).substring(2)}${Date.now()}`;
-    const newDev: Device = {
-      id: `dev_${Date.now()}`,
-      serialNumber: serial,
-      macAddress: mac,
-      firmwareVersion: "v1.4.2",
-      status: "unpaired",
-      batteryPercent: 100,
-      lastSeenAt: new Date().toISOString(),
-      token,
-      sensorHealth: {
-        imuThigh: "healthy",
-        imuShank: "healthy",
-        fsrFoot: "healthy",
-        tempSensor: "healthy",
-      },
-    };
-
-    setDevices([newDev, ...devices]);
-    setGeneratedToken(token);
+    setSubmitting(true);
+    try {
+      const resp = await devicesApi.create({
+        device_identifier: serial,
+        mac_address: mac,
+      });
+      if (resp && resp.hardwareBearerToken) {
+        setGeneratedToken(resp.hardwareBearerToken);
+      }
+      fetchDevices();
+    } catch (err: any) {
+      alert(err.message || "Failed to provision device");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleConfirmRevoke = () => {
+  const handleRevokeDevice = async () => {
     if (!selectedDevice) return;
-    setDevices(devices.filter((d) => d.id !== selectedDevice.id));
-    setRevokeOpen(false);
-    setSelectedDevice(null);
+    try {
+      await devicesApi.revoke(selectedDevice.id);
+      setRevokeOpen(false);
+      setSelectedDevice(null);
+      fetchDevices();
+    } catch (err: any) {
+      alert(err.message || "Failed to revoke device");
+    }
   };
 
   const columns: Column<Device>[] = [
-    { key: "serialNumber", header: "Serial / ID", sortable: true },
-    { key: "macAddress", header: "Hardware MAC Address", sortable: true },
+    { key: "serialNumber", header: "Hardware Identifier", sortable: true },
+    { key: "macAddress", header: "MAC Address", sortable: true },
     { key: "firmwareVersion", header: "Firmware", sortable: true },
     {
       key: "status",
@@ -66,7 +85,7 @@ export default function AdminDevicesPage() {
       sortable: true,
       render: (d) => (
         <StatusBadge
-          status={d.status === "online" ? "healthy" : d.status === "maintenance" ? "degraded" : "stale"}
+          status={d.status === "active" || d.status === "online" ? "healthy" : "degraded"}
           labelOverride={d.status.toUpperCase()}
           size="sm"
         />
@@ -75,44 +94,33 @@ export default function AdminDevicesPage() {
     {
       key: "batteryPercent",
       header: "Battery",
-      render: (d) => <span className="font-semibold text-slate-800">{d.batteryPercent}%</span>,
-    },
-    {
-      key: "assignedPatientName",
-      header: "Paired Subject",
+      sortable: true,
       render: (d) => (
-        <span className="text-xs text-slate-700">
-          {d.assignedPatientName || <span className="text-slate-400 italic">Unassigned Pool</span>}
+        <span className="font-mono text-xs">
+          {d.batteryPercent}%
         </span>
       ),
     },
     {
+      key: "assignedPatientName",
+      header: "Assigned Patient",
+      render: (d) => d.assignedPatientName || <span className="text-slate-400 italic">Unassigned</span>,
+    },
+    {
       key: "id",
-      header: "Security Actions",
+      header: "Actions",
       render: (d) => (
         <div className="flex items-center gap-2">
           <Button
             size="sm"
-            variant="outline"
-            className="h-7 text-xs gap-1"
-            onClick={() => {
-              setSelectedDevice(d);
-              setGeneratedToken(d.token || `ortho_sec_${Math.random().toString(36).substring(2)}`);
-              setProvisionOpen(true);
-            }}
-          >
-            <Key className="h-3 w-3" /> Token
-          </Button>
-          <Button
-            size="sm"
             variant="ghost"
-            className="h-7 text-xs text-red-600 hover:bg-red-50"
             onClick={() => {
               setSelectedDevice(d);
               setRevokeOpen(true);
             }}
+            className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
           >
-            <Trash2 className="h-3 w-3" /> Retire
+            Revoke
           </Button>
         </div>
       ),
@@ -125,65 +133,73 @@ export default function AdminDevicesPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              Edge Device Registry & Provisioning (W2.4)
+              Edge Hardware & Device Fleet
             </h1>
-            <p className="text-xs text-slate-500 mt-1">
-              ESP32-S3 microcontroller enrollment, token issuance, and device lifecycle retirement.
+            <p className="text-sm text-slate-500 mt-1">
+              ESP32-S3 microcontroller registration, cryptographic token management, and fleet status.
             </p>
           </div>
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={() => {
-              setSelectedDevice(null);
-              setGeneratedToken("");
-              setProvisionOpen(true);
-            }}
-            className="gap-1.5"
-          >
-            <Plus className="h-4 w-4" /> Register New ESP32-S3
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchDevices}
+              loading={loading}
+              className="gap-1.5"
+            >
+              <RefreshCw className="h-4 w-4" /> Refresh
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setGeneratedToken("");
+                setProvisionOpen(true);
+              }}
+              className="gap-1.5"
+            >
+              <Plus className="h-4 w-4" /> Register New ESP32 Device
+            </Button>
+          </div>
         </div>
 
         <Card>
-          <CardHeader className="py-3">
-            <CardTitle>Enrolled Microcontrollers ({devices.length})</CardTitle>
+          <CardHeader>
+            <CardTitle>Physical Device Registry</CardTitle>
+            <CardDescription>
+              Hardware devices active in clinical field deployment.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="p-0">
-            <DataTable
-              data={devices}
-              columns={columns}
-              keyExtractor={(d) => d.id}
-            />
+          <CardContent>
+            {loading ? (
+              <SkeletonTable rows={4} cols={6} />
+            ) : (
+              <DataTable columns={columns} data={devices} />
+            )}
           </CardContent>
         </Card>
 
         {/* Provisioning Dialog */}
         <Dialog
-          open={provisionOpen}
-          onClose={() => {
-            setProvisionOpen(false);
-            setGeneratedToken("");
-          }}
-          title={selectedDevice ? `Provisioning Credentials: ${selectedDevice.serialNumber}` : "Register New Edge Board"}
-          description="Issue cryptographic ingestion tokens for mutual DRF authentication."
+          isOpen={provisionOpen}
+          onClose={() => setProvisionOpen(false)}
+          title="Register ESP32-S3 Edge Device"
+          description="Enter hardware serial number and MAC address to issue a cryptographic bearer token."
         >
           {generatedToken ? (
             <div className="space-y-4">
-              <div className="p-3 bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 rounded-lg flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                Hardware cryptographic key generated successfully.
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold uppercase text-slate-500">Board Auth Token</label>
-                <div className="p-3 bg-slate-900 text-teal-400 font-mono text-xs rounded-lg select-all break-all">
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
+                <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
+                  <CheckCircle2 className="h-4 w-4" /> Device Provisioned Successfully
+                </div>
+                <p className="text-xs text-emerald-700">
+                  Save this hardware authentication token now. For security, this secret token cannot be shown again:
+                </p>
+                <div className="p-2.5 bg-white border border-emerald-300 rounded-lg font-mono text-xs text-emerald-950 break-all select-all">
                   {generatedToken}
                 </div>
               </div>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Flash this token to non-volatile storage (NVS) on the ESP32-S3 board. The board will present this token in its HTTPS authorization header during telemetry stream ingestion.
-              </p>
-              <div className="flex justify-end pt-2">
+              <div className="flex justify-end">
                 <Button variant="primary" onClick={() => setProvisionOpen(false)}>
                   Done
                 </Button>
@@ -193,46 +209,46 @@ export default function AdminDevicesPage() {
             <form onSubmit={handleRegisterDevice} className="space-y-4">
               <Input
                 label="Device Serial Number"
-                placeholder="e.g. ESP32-S3-ORTHO-115"
                 required
+                placeholder="e.g. ESP32-S3-ORTHO-099"
                 value={serial}
                 onChange={(e) => setSerial(e.target.value)}
               />
               <Input
-                label="Hardware MAC Address"
-                placeholder="e.g. 40:22:D8:E1:94:11"
+                label="MAC Address"
                 required
+                placeholder="e.g. 7C:DF:A1:88:9B:42"
                 value={mac}
                 onChange={(e) => setMac(e.target.value)}
               />
               <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="ghost" onClick={() => setProvisionOpen(false)}>
+                <Button type="button" variant="outline" onClick={() => setProvisionOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" variant="primary">
-                  Generate Ingestion Key
+                <Button type="submit" variant="primary" loading={submitting}>
+                  Generate Device Credentials
                 </Button>
               </div>
             </form>
           )}
         </Dialog>
 
-        {/* Revocation Dialog */}
+        {/* Revoke Dialog */}
         <Dialog
-          open={revokeOpen}
+          isOpen={revokeOpen}
           onClose={() => setRevokeOpen(false)}
-          title="Confirm Device Retirement & Key Revocation"
-          description={`Permanently revoke authentication tokens for ${selectedDevice?.serialNumber}?`}
+          title="Revoke Device Credentials"
+          description="Are you sure you want to permanently revoke this device? It will immediately stop accepting telemetry packets."
         >
           <div className="space-y-4">
-            <p className="text-xs text-red-700 bg-red-50 p-3 rounded-lg border border-red-200">
-              Warning: Revoking this device will instantly terminate active telemetry sessions and prevent future DRF REST ingestion until re-provisioned.
-            </p>
+            <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-800 rounded-lg">
+              <span className="font-bold">Target Device:</span> {selectedDevice?.serialNumber} ({selectedDevice?.macAddress})
+            </div>
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setRevokeOpen(false)}>
+              <Button variant="outline" onClick={() => setRevokeOpen(false)}>
                 Cancel
               </Button>
-              <Button variant="destructive" onClick={handleConfirmRevoke}>
+              <Button variant="danger" onClick={handleRevokeDevice}>
                 Confirm Revocation
               </Button>
             </div>
@@ -242,4 +258,3 @@ export default function AdminDevicesPage() {
     </AppShell>
   );
 }
-

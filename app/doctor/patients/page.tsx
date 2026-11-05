@@ -7,14 +7,32 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { DataTable, Column } from "@/components/ui/DataTable";
-import { INITIAL_USERS } from "@/lib/services/mock-data";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { patientsApi } from "@/lib/services/api";
 import { User } from "@/lib/types";
-import { Search, ChevronRight, UserPlus, Filter } from "lucide-react";
+import { Search, ChevronRight, UserPlus, Filter, RefreshCw } from "lucide-react";
 
 export default function DoctorPatientsPage() {
   const [searchTerm, setSearchTerm] = React.useState("");
+  const [patients, setPatients] = React.useState<User[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
-  const patients = INITIAL_USERS.filter((u) => u.role === "patient");
+  const fetchPatients = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await patientsApi.getAll();
+      setPatients(data);
+    } catch {
+      // Keep empty if error
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchPatients();
+  }, [fetchPatients]);
+
   const filtered = patients.filter(
     (p) =>
       p.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -69,41 +87,55 @@ export default function DoctorPatientsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              Patient Cohort Directory (W3.2)
+              Assigned Patient Cohort
             </h1>
-            <p className="text-xs text-slate-500 mt-1">
-              Longitudinal tracking and rehabilitation protocol assignments across clinical cohorts.
+            <p className="text-sm text-slate-500 mt-1">
+              Select a patient to inspect biomechanical telemetry, edit prescriptions, or review sessions.
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="relative w-64">
-              <Input
-                placeholder="Search by name or surgery..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="h-9 text-xs"
-              />
-            </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchPatients}
+              className="gap-1.5"
+              loading={loading}
+            >
+              <RefreshCw className="h-4 w-4" /> Refresh
+            </Button>
+            <Button variant="primary" size="sm" className="gap-1.5">
+              <UserPlus className="h-4 w-4" /> Enroll New Patient
+            </Button>
           </div>
         </div>
 
         <Card>
-          <CardHeader className="py-4">
-            <CardTitle>Assigned Patients ({filtered.length})</CardTitle>
-            <CardDescription>
-              Select a patient record to view range-of-motion progression, recent session graphs, and prescribed exercise plans.
-            </CardDescription>
+          <CardHeader className="pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <CardTitle>Clinical Patient Directory</CardTitle>
+              <div className="w-full sm:w-72">
+                <Input
+                  placeholder="Search by patient name or diagnosis..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  icon={<Search className="h-4 w-4 text-slate-400" />}
+                />
+              </div>
+            </div>
           </CardHeader>
-          <CardContent className="p-0">
-            <DataTable
-              data={filtered}
-              columns={columns}
-              keyExtractor={(p) => p.id}
-            />
+          <CardContent>
+            {loading ? (
+              <SkeletonTable rows={5} cols={4} />
+            ) : (
+              <DataTable
+                columns={columns}
+                data={filtered}
+                emptyMessage="No assigned patients found matching criteria."
+              />
+            )}
           </CardContent>
         </Card>
       </div>
     </AppShell>
   );
 }
-
