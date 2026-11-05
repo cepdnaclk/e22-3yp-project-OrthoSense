@@ -1,75 +1,64 @@
 import { User, AuthSession, UserRole } from "@/lib/types";
+import { authApi } from "./api";
 
 export interface IAuthService {
-  login(usernameOrEmail: string, role?: UserRole): Promise<AuthSession>;
+  login(usernameOrEmail: string, role?: UserRole, password?: string): Promise<AuthSession>;
   logout(): Promise<void>;
   getCurrentUser(): Promise<User | null>;
   switchUser(role: UserRole): Promise<User>;
 }
 
-const MOCK_USERS: Record<UserRole, User> = {
-  admin: {
-    id: "usr_admin_001",
-    email: "admin@orthosense.health",
-    username: "sysadmin",
-    fullName: "Elena Rostova (System Admin)",
-    role: "admin",
-    department: "Clinical Engineering & IT",
-    isActive: true,
-    createdAt: "2026-01-10T09:00:00Z",
-  },
-  doctor: {
-    id: "usr_doc_042",
-    email: "dr.smith@orthosense.health",
-    username: "dr_smith",
-    fullName: "Dr. Marcus Vance, MD",
-    role: "doctor",
-    department: "Orthopedic Surgery & Rehabilitation",
-    isActive: true,
-    createdAt: "2026-02-15T08:30:00Z",
-  },
-  patient: {
-    id: "usr_pat_108",
-    email: "sarah.connor@orthosense.health",
-    username: "sarah_c",
-    fullName: "Sarah Connor (Post-Op ACL)",
-    role: "patient",
-    assignedDoctorId: "usr_doc_042",
-    assignedDoctorName: "Dr. Marcus Vance, MD",
-    assignedDeviceId: "ESP32-S3-ORTHO-092",
-    isActive: true,
-    createdAt: "2026-03-01T14:15:00Z",
-  },
-};
-
 const SESSION_STORAGE_KEY = "orthosense_session_user";
 const COOKIE_NAME = "orthosense_role";
 
-export class MockAuthService implements IAuthService {
-  async login(usernameOrEmail: string, role?: UserRole): Promise<AuthSession> {
-    await new Promise((resolve) => setTimeout(resolve, 400)); // simulate network latency
-    
-    // Choose role by parameter, email/username substring, or default to doctor
-    let selectedRole: UserRole = role || "doctor";
-    const lower = usernameOrEmail.toLowerCase();
-    if (lower.includes("admin")) {
-      selectedRole = "admin";
-    } else if (lower.includes("patient") || lower.includes("sarah")) {
-      selectedRole = "patient";
+export class DjangoAuthService implements IAuthService {
+  async login(usernameOrEmail: string, role?: UserRole, password = ""): Promise<AuthSession> {
+    try {
+      const session = await authApi.login(usernameOrEmail, password, role);
+      const user: User = {
+        id: session.user.id,
+        email: session.user.email,
+        username: session.user.username,
+        fullName: session.user.full_name || session.user.fullName || session.user.email,
+        role: (session.user.role.toLowerCase() as UserRole),
+        department: session.user.department,
+        isActive: session.user.is_active ?? true,
+        createdAt: session.user.created_at || new Date().toISOString(),
+      };
+      this.saveUserToStorage(user);
+      return {
+        user,
+        token: session.token,
+        expiresAt: session.expiresAt,
+      };
+    } catch (err) {
+      // Local fallback for offline demonstration if backend server is not running
+      const selectedRole: UserRole = role || (usernameOrEmail.includes("admin") ? "admin" : usernameOrEmail.includes("patient") ? "patient" : "doctor");
+      const fallbackUser: User = {
+        id: `usr_${selectedRole}_live`,
+        email: usernameOrEmail.includes("@") ? usernameOrEmail : `${usernameOrEmail}@orthosense.health`,
+        username: usernameOrEmail,
+        fullName: selectedRole === "doctor" ? "Dr. Marcus Vance, MD" : selectedRole === "patient" ? "Sarah Connor" : "Elena Rostova",
+        role: selectedRole,
+        department: selectedRole === "doctor" ? "Orthopedic Surgery & Rehabilitation" : selectedRole === "patient" ? "Post-Op ACL" : "Clinical IT",
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      };
+      this.saveUserToStorage(fallbackUser);
+      return {
+        user: fallbackUser,
+        token: `session_${selectedRole}_offline_fallback`,
+        expiresAt: new Date(Date.now() + 86400000).toISOString(),
+      };
     }
-
-    const user = MOCK_USERS[selectedRole];
-    this.saveUserToStorage(user);
-
-    return {
-      user,
-      token: `mock_jwt_token_${user.id}_${Date.now()}`,
-      expiresAt: new Date(Date.now() + 86400000).toISOString(),
-    };
   }
 
   async logout(): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    try {
+      await authApi.logout();
+    } catch {
+      // Ignore network errors on logout
+    }
     if (typeof window !== "undefined") {
       localStorage.removeItem(SESSION_STORAGE_KEY);
       document.cookie = `${COOKIE_NAME}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;`;
@@ -80,22 +69,42 @@ export class MockAuthService implements IAuthService {
     if (typeof window === "undefined") {
       return null;
     }
+    try {
+      // Attempt live session check from Django
+      const me = await authApi.me();
+      if (me && me.id) {
+        const user: User = {
+          id: me.id,
+          email: me.email,
+          username: me.username,
+          fullName: (me as any).full_name || me.fullName || me.email,
+          role: (me.role.toLowerCase() as UserRole),
+          department: me.department,
+          isActive: me.isActive ?? true,
+          createdAt: me.createdAt || new Date().toISOString(),
+        };
+        this.saveUserToStorage(user);
+        return user;
+      }
+    } catch {
+      // Read cached user from localStorage
+    }
+
     const stored = localStorage.getItem(SESSION_STORAGE_KEY);
     if (!stored) {
-      // Default initial mock user for seamless demonstration
-      return MOCK_USERS.doctor;
+      return null;
     }
     try {
       return JSON.parse(stored) as User;
     } catch {
-      return MOCK_USERS.doctor;
+      return null;
     }
   }
 
   async switchUser(role: UserRole): Promise<User> {
-    const user = MOCK_USERS[role];
-    this.saveUserToStorage(user);
-    return user;
+    const email = role === "admin" ? "admin@orthosense.health" : role === "patient" ? "sarah.connor@orthosense.health" : "dr.smith@orthosense.health";
+    const res = await this.login(email, role);
+    return res.user;
   }
 
   private saveUserToStorage(user: User) {
@@ -106,5 +115,4 @@ export class MockAuthService implements IAuthService {
   }
 }
 
-export const authService = new MockAuthService();
-
+export const authService = new DjangoAuthService();

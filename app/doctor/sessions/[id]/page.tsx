@@ -8,7 +8,9 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { TelemetryChart } from "@/components/features/TelemetryChart";
-import { INITIAL_SESSIONS } from "@/lib/services/mock-data";
+import { Skeleton, SkeletonMetricsGrid, SkeletonCard } from "@/components/ui/Skeleton";
+import { sessionsApi } from "@/lib/services/api";
+import { ExerciseSession, TelemetryPoint } from "@/lib/types";
 import {
   ArrowLeft,
   Printer,
@@ -22,22 +24,54 @@ import {
 
 export default function SessionTelemetryViewer() {
   const params = useParams();
-  const router = useRouter();
   const sessionId = params?.id as string;
 
-  const session = INITIAL_SESSIONS.find((s) => s.id === sessionId) || INITIAL_SESSIONS[0];
+  const [session, setSession] = React.useState<ExerciseSession | null>(null);
+  const [telemetry, setTelemetry] = React.useState<TelemetryPoint[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [notes, setNotes] = React.useState("");
+  const [saved, setSaved] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
 
-  const [notes, setNotes] = React.useState(session.reviewNotes || "");
-  const [saved, setSaved] = React.useState(session.doctorReviewed || false);
+  React.useEffect(() => {
+    async function loadData() {
+      if (!sessionId) return;
+      setLoading(true);
+      try {
+        const [sessData, telData] = await Promise.all([
+          sessionsApi.getById(sessionId).catch(() => null),
+          sessionsApi.getTelemetry(sessionId, 500).catch(() => []),
+        ]);
+        if (sessData) {
+          setSession(sessData);
+          setNotes(sessData.reviewNotes || "");
+          setSaved(sessData.doctorReviewed || false);
+        }
+        setTelemetry(telData);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, [sessionId]);
 
-  const handleSaveNotes = () => {
-    setSaved(true);
+  const handleSaveNotes = async () => {
+    if (!sessionId || !notes) return;
+    setSubmitting(true);
+    try {
+      await sessionsApi.review(sessionId, notes);
+      setSaved(true);
+    } catch (err: any) {
+      alert(err.message || "Failed to submit review");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const exportCSV = () => {
-    if (!session.telemetrySample) return;
+    if (!telemetry.length) return;
     const headers = "timestampMs,kneeAngleDeg,fsrHeelRaw,fsrToeRaw,skinTemperatureC\n";
-    const rows = session.telemetrySample
+    const rows = telemetry
       .map(
         (p) =>
           `${p.timestampMs},${p.kneeAngleDeg ?? ""},${p.fsrHeelRaw ?? ""},${p.fsrToeRaw ?? ""},${p.skinTemperatureC ?? ""}`
@@ -47,11 +81,39 @@ export default function SessionTelemetryViewer() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", `orthosense_${session.id}_raw_telemetry.csv`);
+    link.setAttribute("download", `orthosense_${sessionId}_raw_telemetry.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
+
+  if (loading) {
+    return (
+      <AppShell>
+        <div className="space-y-6">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-9 w-32" />
+            <Skeleton className="h-9 w-64" />
+          </div>
+          <SkeletonMetricsGrid count={4} />
+          <SkeletonCard className="h-96" />
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (!session) {
+    return (
+      <AppShell>
+        <div className="p-8 text-center space-y-4">
+          <p className="text-slate-600">Session record not found.</p>
+          <Link href="/doctor/dashboard">
+            <Button variant="outline">Back to Dashboard</Button>
+          </Link>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
@@ -81,11 +143,11 @@ export default function SessionTelemetryViewer() {
 
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" className="gap-1.5" onClick={exportCSV}>
-              <Download className="h-4 w-4" /> Export CSV (W5.5)
+              <Download className="h-4 w-4" /> Export CSV
             </Button>
             <Link href={`/reports/session/${session.id}`} target="_blank">
               <Button size="sm" variant="primary" className="gap-1.5">
-                <Printer className="h-4 w-4" /> Printable Clinical Report (W5.4)
+                <Printer className="h-4 w-4" /> Printable Clinical Report
               </Button>
             </Link>
           </div>
@@ -119,82 +181,85 @@ export default function SessionTelemetryViewer() {
           <div className="p-4 bg-white rounded-xl border border-slate-200">
             <p className="text-xs font-semibold text-slate-500 uppercase">Duration & Freshness</p>
             <p className="text-2xl font-extrabold text-slate-900 mt-1">
-              {Math.floor(session.durationSeconds / 60)}m {session.durationSeconds % 60}s
+              {Math.round(session.durationSeconds / 60)} mins
             </p>
             <p className="text-[11px] text-slate-500">Recorded {new Date(session.startedAt).toLocaleTimeString()}</p>
           </div>
         </div>
 
-        {/* Synchronized Multi-Channel Chart */}
-        <TelemetryChart
-          data={session.telemetrySample || []}
-          title={`Synchronized Session Telemetry Stream (${session.exerciseName})`}
-        />
-
-        {/* Clinical Notes & Non-Fabrication Guarantee */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="md:col-span-2">
-            <CardHeader>
-              <CardTitle>Doctor Clinical Review Observations (W3.8)</CardTitle>
-              <CardDescription>
-                Physician observations are stored immutably alongside the session without modifying raw sensor data.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <textarea
-                value={notes}
-                onChange={(e) => {
-                  setNotes(e.target.value);
-                  setSaved(false);
-                }}
-                rows={4}
-                className="w-full text-sm p-3 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0F766E] text-slate-800"
-                placeholder="Write clinical feedback on range of motion, pacing, cadence, and patient tolerance..."
-              />
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-500">
-                  {saved ? (
-                    <span className="text-emerald-700 font-semibold flex items-center gap-1">
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Reviewed by Dr. Marcus Vance, MD
-                    </span>
-                  ) : (
-                    "Unsaved changes"
-                  )}
+        {/* Multi-Channel Synchronized Time-Series Chart */}
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <CardTitle>Continuous Telemetry Inspection</CardTitle>
+                <CardDescription>
+                  Multi-channel kinematic and force stream captured by ESP32-S3.
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-3 text-xs font-medium">
+                <span className="flex items-center gap-1.5 text-teal-700">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#0F766E]"></span> Knee Flexion (°)
                 </span>
-                <Button size="sm" variant="primary" onClick={handleSaveNotes}>
-                  Save & Sign Clinical Note
-                </Button>
+                <span className="flex items-center gap-1.5 text-blue-700">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#2563EB]"></span> Heel FSR (kg-f)
+                </span>
+                <span className="flex items-center gap-1.5 text-amber-700">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#D97706]"></span> Skin Temp (°C)
+                </span>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-2">
+            <TelemetryChart points={telemetry} />
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Hardware Health Audit</CardTitle>
-              <CardDescription>Channels verified during capture</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 text-xs">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <span className="font-medium text-slate-700">IMU 1 (Thigh)</span>
-                <StatusBadge status="healthy" labelOverride="READ_OK" size="sm" />
+        {/* Doctor Clinical Review Sign-off */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Supervising Clinician Review & Feedback</CardTitle>
+                <CardDescription>
+                  Formal orthopedic sign-off attached to patient longitudinal history.
+                </CardDescription>
               </div>
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <span className="font-medium text-slate-700">IMU 2 (Shank)</span>
-                <StatusBadge status="healthy" labelOverride="READ_OK" size="sm" />
-              </div>
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <span className="font-medium text-slate-700">FSR Heel Load</span>
-                <StatusBadge status="healthy" labelOverride="READ_OK" size="sm" />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-slate-700">Skin Temp (NTC)</span>
-                <StatusBadge status="healthy" labelOverride="READ_OK" size="sm" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+              {saved && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  Clinician Approved
+                </span>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <textarea
+              className="w-full h-28 p-3 text-xs rounded-lg border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-[#0F766E] resize-none"
+              placeholder="Enter clinical observations, ROM achievements, or modifications to target flexion limits..."
+              value={notes}
+              onChange={(e) => {
+                setNotes(e.target.value);
+                setSaved(false);
+              }}
+            />
+          </CardContent>
+          <CardFooter className="flex justify-between items-center border-t border-slate-100 pt-4">
+            <p className="text-[11px] text-slate-500">
+              Approved notes appear immediately in Sarah Connor&apos;s patient portal.
+            </p>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSaveNotes}
+              loading={submitting}
+              className="gap-1.5"
+            >
+              <CheckCircle2 className="h-4 w-4" /> Save &amp; Authorize Clinical Review
+            </Button>
+          </CardFooter>
+        </Card>
       </div>
     </AppShell>
   );
 }
-

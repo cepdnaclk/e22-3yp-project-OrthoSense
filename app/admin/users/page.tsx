@@ -8,12 +8,15 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Dialog } from "@/components/ui/Dialog";
 import { DataTable, Column } from "@/components/ui/DataTable";
-import { INITIAL_USERS } from "@/lib/services/mock-data";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { patientsApi } from "@/lib/services/api";
+import { apiClient } from "@/lib/services/api-client";
 import { User, UserRole } from "@/lib/types";
-import { UserPlus, Shield, Search, CheckCircle2 } from "lucide-react";
+import { UserPlus, Shield, Search, CheckCircle2, RefreshCw } from "lucide-react";
 
 export default function AdminUsersPage() {
-  const [users, setUsers] = React.useState<User[]>(INITIAL_USERS);
+  const [users, setUsers] = React.useState<User[]>([]);
+  const [loading, setLoading] = React.useState(true);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [roleFilter, setRoleFilter] = React.useState<string>("all");
   const [inviteModalOpen, setInviteModalOpen] = React.useState(false);
@@ -23,6 +26,22 @@ export default function AdminUsersPage() {
   const [email, setEmail] = React.useState("");
   const [role, setRole] = React.useState<UserRole>("doctor");
   const [department, setDepartment] = React.useState("");
+
+  const fetchUsers = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await patientsApi.getAll();
+      setUsers(data);
+    } catch {
+      // Keep empty if error
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
 
   const filteredUsers = users.filter((u) => {
     const matchSearch =
@@ -59,7 +78,7 @@ export default function AdminUsersPage() {
   };
 
   const columns: Column<User>[] = [
-    { key: "fullName", header: "Name / Staff Identity", sortable: true },
+    { key: "fullName", header: "User", sortable: true },
     { key: "email", header: "Email Address", sortable: true },
     {
       key: "role",
@@ -67,32 +86,32 @@ export default function AdminUsersPage() {
       sortable: true,
       render: (u) => (
         <span
-          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold uppercase ${
+          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
             u.role === "admin"
-              ? "bg-slate-100 text-slate-800 border border-slate-300"
+              ? "bg-purple-50 text-purple-700 border border-purple-200"
               : u.role === "doctor"
               ? "bg-teal-50 text-teal-800 border border-teal-200"
-              : "bg-blue-50 text-blue-800 border border-blue-200"
+              : "bg-blue-50 text-blue-700 border border-blue-200"
           }`}
         >
-          {u.role}
+          {u.role.toUpperCase()}
         </span>
       ),
     },
-    { key: "department", header: "Department / Assignment", sortable: true },
+    { key: "department", header: "Department / Cohort", sortable: true },
     {
       key: "isActive",
-      header: "Status",
+      header: "Account Status",
       render: (u) => (
         <button
           onClick={() => handleToggleActive(u.id)}
-          className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors cursor-pointer ${
+          className={`px-2 py-1 rounded text-xs font-medium cursor-pointer transition-colors ${
             u.isActive
-              ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
-              : "bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
+              ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+              : "bg-slate-100 text-slate-500 hover:bg-slate-200"
           }`}
         >
-          {u.isActive ? "Active (Enabled)" : "Disabled"}
+          {u.isActive ? "Active" : "Suspended"}
         </button>
       ),
     },
@@ -101,90 +120,93 @@ export default function AdminUsersPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        {/* Boundary Notice */}
-        <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-xs">
-          <strong>Clinical-Administrative Boundary Rule:</strong> As an administrator, you have permission to provision accounts and hardware. Clinical patient session telemetry charts and diagnostic notes are strictly forbidden from this workspace.
-        </div>
-
-        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              User Directory & Role Governance (W2.1)
+              Identity & Access Governance
             </h1>
-            <p className="text-xs text-slate-500 mt-1">
-              Provision clinician, administrator, and subject accounts across clinical units.
+            <p className="text-sm text-slate-500 mt-1">
+              Administer clinical staff roles, provision patient credentials, and maintain directory integrity.
             </p>
           </div>
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={() => setInviteModalOpen(true)}
-            className="gap-1.5"
-          >
-            <UserPlus className="h-4 w-4" /> Provision New User
-          </Button>
-        </div>
-
-        {/* Filter Controls */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="w-64">
-            <Input
-              placeholder="Search by name or email..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-9 text-xs"
-            />
-          </div>
-          <div className="w-48">
-            <Select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
-              className="h-9 text-xs"
-              options={[
-                { value: "all", label: "All User Roles" },
-                { value: "doctor", label: "Doctors & Clinicians" },
-                { value: "patient", label: "Rehabilitation Patients" },
-                { value: "admin", label: "System Administrators" },
-              ]}
-            />
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchUsers}
+              loading={loading}
+              className="gap-1.5"
+            >
+              <RefreshCw className="h-4 w-4" /> Refresh
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setInviteModalOpen(true)}
+              className="gap-1.5"
+            >
+              <UserPlus className="h-4 w-4" /> Invite New User
+            </Button>
           </div>
         </div>
 
-        {/* Table */}
         <Card>
-          <CardHeader className="py-3">
-            <CardTitle>Registered Accounts ({filteredUsers.length})</CardTitle>
+          <CardHeader className="pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <CardTitle>User Directory</CardTitle>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="w-64">
+                  <Input
+                    placeholder="Search name or email..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    icon={<Search className="h-4 w-4 text-slate-400" />}
+                  />
+                </div>
+                <div className="w-36">
+                  <Select
+                    value={roleFilter}
+                    onChange={(e) => setRoleFilter(e.target.value)}
+                    options={[
+                      { value: "all", label: "All Roles" },
+                      { value: "doctor", label: "Doctors" },
+                      { value: "patient", label: "Patients" },
+                      { value: "admin", label: "Admins" },
+                    ]}
+                  />
+                </div>
+              </div>
+            </div>
           </CardHeader>
-          <CardContent className="p-0">
-            <DataTable
-              data={filteredUsers}
-              columns={columns}
-              keyExtractor={(u) => u.id}
-            />
+          <CardContent>
+            {loading ? (
+              <SkeletonTable rows={5} cols={5} />
+            ) : (
+              <DataTable columns={columns} data={filteredUsers} />
+            )}
           </CardContent>
         </Card>
 
-        {/* Provision Modal */}
+        {/* Invite User Dialog */}
         <Dialog
-          open={inviteModalOpen}
+          isOpen={inviteModalOpen}
           onClose={() => setInviteModalOpen(false)}
-          title="Provision New Healthcare Account"
-          description="Assign email, access role, and clinical department."
+          title="Invite New User"
+          description="Provision account credentials for a doctor, patient, or administrative staff."
         >
           <form onSubmit={handleInviteSubmit} className="space-y-4">
             <Input
               label="Full Name"
               required
-              placeholder="e.g. Dr. Catherine Brooks"
+              placeholder="e.g. Dr. Jane Foster or John Doe"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
             <Input
-              label="Email Address"
+              label="Work Email"
               type="email"
               required
-              placeholder="e.g. c.brooks@orthosense.health"
+              placeholder="jane.foster@orthosense.health"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -193,23 +215,23 @@ export default function AdminUsersPage() {
               value={role}
               onChange={(e) => setRole(e.target.value as UserRole)}
               options={[
-                { value: "doctor", label: "Doctor / Clinician" },
-                { value: "patient", label: "Patient" },
+                { value: "doctor", label: "Clinician / Doctor (Medical Staff)" },
+                { value: "patient", label: "Rehabilitation Patient" },
                 { value: "admin", label: "System Administrator" },
               ]}
             />
             <Input
-              label="Clinical Unit / Department"
-              placeholder="e.g. Orthopedic Sports Medicine"
+              label="Department / Surgical Group"
+              placeholder="e.g. Post-Op ACL Cohort or Orthopedic Surgery"
               value={department}
               onChange={(e) => setDepartment(e.target.value)}
             />
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="ghost" onClick={() => setInviteModalOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => setInviteModalOpen(false)}>
                 Cancel
               </Button>
               <Button type="submit" variant="primary">
-                Provision User
+                Send Invitation
               </Button>
             </div>
           </form>
@@ -218,4 +240,3 @@ export default function AdminUsersPage() {
     </AppShell>
   );
 }
-

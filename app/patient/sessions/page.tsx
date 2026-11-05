@@ -7,12 +7,30 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { DataTable, Column } from "@/components/ui/DataTable";
-import { INITIAL_SESSIONS } from "@/lib/services/mock-data";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { sessionsApi } from "@/lib/services/api";
 import { ExerciseSession } from "@/lib/types";
-import { ArrowLeft, Play, Calendar } from "lucide-react";
+import { ArrowLeft, Play, Calendar, RefreshCw } from "lucide-react";
 
 export default function PatientSessionsHistoryPage() {
-  const sessions = INITIAL_SESSIONS;
+  const [sessions, setSessions] = React.useState<ExerciseSession[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  const fetchSessions = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await sessionsApi.getAll();
+      setSessions(data);
+    } catch {
+      // Keep empty if error
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchSessions();
+  }, [fetchSessions]);
 
   const columns: Column<ExerciseSession>[] = [
     { key: "startedAt", header: "Date / Time", sortable: true, render: (s) => new Date(s.startedAt).toLocaleString() },
@@ -42,7 +60,7 @@ export default function PatientSessionsHistoryPage() {
       render: (s) =>
         s.doctorReviewed ? (
           <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-            Reviewed by Dr. Vance
+            Reviewed by Doctor
           </span>
         ) : (
           <span className="text-xs text-slate-400">Pending Review</span>
@@ -62,37 +80,47 @@ export default function PatientSessionsHistoryPage() {
             </Link>
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-                My Session History (W4.6)
+                My Rehabilitation History
               </h1>
               <p className="text-xs text-slate-500 mt-1">
-                Completed exercise sessions tracked with your OrthoSense smart knee brace.
+                Log of completed rehabilitation routines, range-of-motion milestones, and clinical doctor feedback.
               </p>
             </div>
           </div>
-          <Link href="/patient/session/record">
-            <Button size="sm" variant="primary" className="gap-1.5">
-              <Play className="h-4 w-4 fill-current" /> Record New Session
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchSessions}
+              loading={loading}
+              className="gap-1.5"
+            >
+              <RefreshCw className="h-4 w-4" /> Refresh
             </Button>
-          </Link>
+            <Link href="/patient/session/record">
+              <Button size="sm" variant="primary" className="gap-1.5">
+                <Play className="h-4 w-4" /> Record New Session
+              </Button>
+            </Link>
+          </div>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Session History</CardTitle>
+            <CardTitle>Historical Therapy Sessions</CardTitle>
             <CardDescription>
-              Every session records synchronized IMU angles and load data stored securely for your clinical team.
+              Every exercise routine is verified by dual IMU sensors and streamed to your clinical team.
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-0">
-            <DataTable
-              data={sessions}
-              columns={columns}
-              keyExtractor={(s) => s.id}
-            />
+          <CardContent>
+            {loading ? (
+              <SkeletonTable rows={4} cols={6} />
+            ) : (
+              <DataTable columns={columns} data={sessions} emptyMessage="No rehabilitation sessions recorded yet." />
+            )}
           </CardContent>
         </Card>
       </div>
     </AppShell>
   );
 }
-

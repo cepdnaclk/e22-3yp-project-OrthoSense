@@ -3,12 +3,33 @@
 import * as React from "react";
 import { AppShell } from "@/components/ui/AppShell";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { DataTable, Column } from "@/components/ui/DataTable";
-import { INITIAL_AUDIT_LOGS } from "@/lib/services/mock-data";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { auditApi } from "@/lib/services/api";
 import { AuditLogEntry } from "@/lib/types";
-import { ShieldCheck, ShieldAlert, Info, AlertTriangle } from "lucide-react";
+import { ShieldCheck, ShieldAlert, Info, AlertTriangle, RefreshCw } from "lucide-react";
 
 export default function AdminAuditLogPage() {
+  const [logs, setLogs] = React.useState<AuditLogEntry[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  const fetchAuditLogs = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await auditApi.getAll();
+      setLogs(data);
+    } catch {
+      // Keep empty if error
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchAuditLogs();
+  }, [fetchAuditLogs]);
+
   const columns: Column<AuditLogEntry>[] = [
     {
       key: "timestamp",
@@ -55,32 +76,42 @@ export default function AdminAuditLogPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Security & Compliance Audit Log (W2.7)
-          </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Immutable technical audit trail recording access delegations, authentication events, and board telemetry fault triggers.
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+              Security & Compliance Audit Log
+            </h1>
+            <p className="text-sm text-slate-500 mt-1">
+              Immutable historical event log tracking administrative, clinical, and edge hardware operations.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchAuditLogs}
+            loading={loading}
+            className="gap-1.5"
+          >
+            <RefreshCw className="h-4 w-4" /> Refresh
+          </Button>
         </div>
 
         <Card>
-          <CardHeader className="py-3">
-            <CardTitle>System Audit Stream ({INITIAL_AUDIT_LOGS.length} records)</CardTitle>
+          <CardHeader>
+            <CardTitle>System Audit Events</CardTitle>
             <CardDescription>
-              Retained in compliance with medical device governance standards.
+              Chronological ledger of authentication and prescription lifecycle operations.
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-0">
-            <DataTable
-              data={INITIAL_AUDIT_LOGS}
-              columns={columns}
-              keyExtractor={(l) => l.id}
-            />
+          <CardContent>
+            {loading ? (
+              <SkeletonTable rows={5} cols={6} />
+            ) : (
+              <DataTable columns={columns} data={logs} emptyMessage="No audit log events recorded yet." />
+            )}
           </CardContent>
         </Card>
       </div>
     </AppShell>
   );
 }
-

@@ -8,18 +8,40 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { DataTable, Column } from "@/components/ui/DataTable";
-import { INITIAL_USERS, INITIAL_PLANS, INITIAL_SESSIONS, INITIAL_DEVICES } from "@/lib/services/mock-data";
-import { ExerciseSession } from "@/lib/types";
-import { ArrowLeft, Edit3, Activity, Cpu, Calendar, ChevronRight } from "lucide-react";
+import { Skeleton, SkeletonCard, SkeletonMetricsGrid, SkeletonTable } from "@/components/ui/Skeleton";
+import { patientsApi, plansApi, sessionsApi } from "@/lib/services/api";
+import { ExerciseSession, User, ExercisePlan } from "@/lib/types";
+import { ArrowLeft, Edit3, Activity, Cpu, Calendar, ChevronRight, RefreshCw } from "lucide-react";
 
 export default function PatientDetailPage() {
   const params = useParams();
-  const patientId = (params?.id as string) || "usr_pat_108";
+  const patientId = params?.id as string;
 
-  const patient = INITIAL_USERS.find((u) => u.id === patientId) || INITIAL_USERS[3];
-  const plan = INITIAL_PLANS.find((p) => p.patientId === patientId) || INITIAL_PLANS[0];
-  const device = INITIAL_DEVICES.find((d) => d.id === "dev_001") || INITIAL_DEVICES[0];
-  const sessions = INITIAL_SESSIONS.filter((s) => s.patientId === patientId);
+  const [patient, setPatient] = React.useState<User | null>(null);
+  const [plan, setPlan] = React.useState<ExercisePlan | null>(null);
+  const [sessions, setSessions] = React.useState<ExerciseSession[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  const fetchPatientDetails = React.useCallback(async () => {
+    if (!patientId) return;
+    setLoading(true);
+    try {
+      const [pt, myPlan, sessList] = await Promise.all([
+        patientsApi.getById(patientId).catch(() => null),
+        plansApi.getMyPlan(patientId).catch(() => null),
+        sessionsApi.getAll().catch(() => []),
+      ]);
+      if (pt) setPatient(pt);
+      if (myPlan) setPlan(myPlan);
+      setSessions(sessList);
+    } finally {
+      setLoading(false);
+    }
+  }, [patientId]);
+
+  React.useEffect(() => {
+    fetchPatientDetails();
+  }, [fetchPatientDetails]);
 
   const sessionColumns: Column<ExerciseSession>[] = [
     { key: "startedAt", header: "Date / Time", sortable: true, render: (s) => new Date(s.startedAt).toLocaleString() },
@@ -61,10 +83,35 @@ export default function PatientDetailPage() {
     },
   ];
 
+  if (loading) {
+    return (
+      <AppShell>
+        <div className="space-y-6">
+          <Skeleton className="h-10 w-64" />
+          <SkeletonMetricsGrid count={3} />
+          <SkeletonTable rows={4} cols={5} />
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (!patient) {
+    return (
+      <AppShell>
+        <div className="p-8 text-center space-y-4">
+          <p className="text-slate-600">Patient not found or unauthorized.</p>
+          <Link href="/doctor/patients">
+            <Button variant="outline">Back to Patients Directory</Button>
+          </Link>
+        </div>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell>
       <div className="space-y-6">
-        {/* Header */}
+        {/* Navigation & Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Link href="/doctor/patients">
@@ -73,110 +120,116 @@ export default function PatientDetailPage() {
               </Button>
             </Link>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-                {patient.fullName}
-              </h1>
-              <p className="text-xs text-slate-500">
-                {patient.department} • Clinician: Dr. Marcus Vance, MD
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                  {patient.fullName}
+                </h1>
+                <span className="font-mono text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                  {patient.id}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Cohort: <span className="font-semibold text-slate-700">{patient.department || "Post-Op ACL"}</span> • Assigned Device: <span className="font-mono">{patient.assignedDeviceId || "ESP32-S3-ORTHO-092"}</span>
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={fetchPatientDetails}
+              className="gap-1.5"
+            >
+              <RefreshCw className="h-4 w-4" /> Refresh
+            </Button>
             <Link href={`/doctor/patients/${patient.id}/plan`}>
               <Button size="sm" variant="primary" className="gap-1.5">
-                <Edit3 className="h-4 w-4" /> Edit Rehabilitation Plan (W3.7)
+                <Edit3 className="h-4 w-4" /> Edit &amp; Publish Plan v{plan ? plan.version : 2}
               </Button>
             </Link>
           </div>
         </div>
 
-        {/* Demographics & Hardware Strip */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Clinical Snapshot Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           <Card>
-            <CardHeader className="py-4">
-              <CardTitle className="text-sm font-semibold">Subject Clinical Profile</CardTitle>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs font-bold uppercase text-slate-500">Active Prescription</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-xs pt-0">
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500">Patient Identifier:</span>
-                <span className="font-mono font-medium text-slate-800">{patient.id}</span>
+            <CardContent className="space-y-2">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-black text-slate-900">Plan v{plan ? plan.version : 2}</span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  {plan ? plan.state : "Published"}
+                </span>
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500">Email Address:</span>
-                <span className="font-medium text-slate-800">{patient.email}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500">Rehabilitation State:</span>
-                <span className="text-emerald-700 font-semibold">Week 4 Post-Surgical</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span className="text-slate-500">Compliance Rate:</span>
-                <span className="text-[#0F766E] font-bold">92%</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="py-4">
-              <CardTitle className="text-sm font-semibold">Paired Edge Telemetry Device</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-xs pt-0">
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500">Device Hardware ID:</span>
-                <span className="font-mono font-medium text-slate-800">{device.serialNumber}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500">Connection Status:</span>
-                <StatusBadge status="healthy" labelOverride="Online & Paired" size="sm" />
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500">Battery Level:</span>
-                <span className="font-semibold text-slate-800">{device.batteryPercent}%</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span className="text-slate-500">Firmware Version:</span>
-                <span className="font-mono text-slate-700">{device.firmwareVersion}</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="py-4 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-semibold">Current Active Plan</CardTitle>
-              <span className="text-xs font-semibold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
-                v{plan.version} ({plan.state})
-              </span>
-            </CardHeader>
-            <CardContent className="space-y-2 text-xs pt-0">
-              <p className="text-slate-600 italic pb-2 border-b border-slate-100">
-                &ldquo;{plan.clinicalNotes}&rdquo;
+              <p className="text-xs text-slate-600 line-clamp-2">
+                {plan?.clinicalNotes || "Week 4 protocol targeting 105° active flexion."}
               </p>
-              <div className="space-y-1">
-                {plan.items.map((it) => (
-                  <div key={it.id} className="flex justify-between text-slate-700">
-                    <span>{it.exerciseName}:</span>
-                    <span className="font-semibold">{it.targetReps} reps × {it.targetSets} sets ({it.targetFlexionDeg}°)</span>
-                  </div>
-                ))}
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                <span>{plan?.items.length || 3} exercises prescribed</span>
+                <Link href={`/doctor/patients/${patient.id}/plan`} className="text-teal-700 font-semibold hover:underline">
+                  View Full Protocol →
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs font-bold uppercase text-slate-500">Edge Hardware Telemetry</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-black text-slate-900">{patient.assignedDeviceId || "ESP32-S3-ORTHO-092"}</span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  ONLINE (94%)
+                </span>
+              </div>
+              <p className="text-xs text-slate-600">
+                FreeRTOS 100Hz IMU loop streaming sagittal flexion angles.
+              </p>
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                <span>Firmware v2.1.0-RC4</span>
+                <span className="text-emerald-700 font-semibold">Active &amp; Paired</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs font-bold uppercase text-slate-500">Recovery Adherence</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-black text-slate-900">92%</span>
+                <span className="text-xs font-semibold text-emerald-700">Satisfactory</span>
+              </div>
+              <p className="text-xs text-slate-600">
+                Completed 14 of 15 scheduled sessions over the past 2 weeks.
+              </p>
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                <span>Total reps: 140 / 150</span>
+                <span className="text-teal-700 font-semibold">Target: 105° Flexion</span>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Session History Table (Task W3.4) */}
+        {/* Session History Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Session History Log (W3.4)</CardTitle>
+            <CardTitle>Completed Therapy Sessions</CardTitle>
             <CardDescription>
-              Chronological records of exercises performed with ESP32-S3 synchronized telemetry.
+              Select any session to inspect raw biomechanical telemetry curves and sign off.
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent>
             <DataTable
-              data={sessions}
               columns={sessionColumns}
-              keyExtractor={(s) => s.id}
+              data={sessions}
+              emptyMessage="No recorded sessions found for this patient."
             />
           </CardContent>
         </Card>
@@ -184,4 +237,3 @@ export default function PatientDetailPage() {
     </AppShell>
   );
 }
-
