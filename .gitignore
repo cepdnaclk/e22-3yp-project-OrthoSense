@@ -1,0 +1,62 @@
+# ==========================================
+# OrthoSense Monorepo Git Ignore Rules
+# ==========================================
+
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Node.js dependencies & builds
+node_modules/
+dist/
+build/
+coverage/
+*.lcov
+.npm/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment & Sensitive Credentials
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+
+# Embedded / PlatformIO / Firmware Builds
+.pio/
+.pioenvs/
+.piolibdeps/
+*.hex
+*.bin
+*.elf
+*.map
+
+# IDEs & Editor Configuration
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+
+# Python / Machine Learning / TinyML
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+*.onnx
+*.tflite
+.ipynb_checkpoints/
+

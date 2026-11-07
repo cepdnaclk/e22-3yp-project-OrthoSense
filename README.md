@@ -302,50 +302,78 @@ OrthoSense is developed by **Team 12** from the Department of Computer Engineeri
 
 ```
 e22-3yp-project-OrthoSense/
-├── README.md                  # Main repository technical overview
-├── code/                      # Firmware, backend, and dashboard source files
-│   ├── firmware/              # ESP32-S3 FreeRTOS & TinyML C++ firmware
-│   ├── backend/               # Django / FastAPI cloud telemetry service
-│   └── dashboard/             # React / Vite clinician web dashboard
-└── docs/                      # GitHub Pages documentation & Jekyll website
-    ├── README.md              # Project documentation home page
-    ├── _config.yml            # Jekyll configuration file
-    ├── data/
-    │   └── index.json         # Department project catalog metadata
-    └── images/                # Architecture diagrams, flowcharts, and media assets
-        ├── orthosense-hero.png
-        ├── system-architecture.png
-        ├── tech-stack-infrastructure.png
-        ├── fault-tolerance-strategy.png
-        ├── implementation-roadmap.png
-        └── viability-benchmark.png
+├── docs/                   # GitHub Pages / UoP CE Project documentation
+│   ├── data/
+│   │   └── index.json      # Project metadata for CE projects portal
+│   ├── images/             # Architecture diagrams, flowcharts, and media assets
+│   ├── _config.yml         # Jekyll configuration file
+│   └── README.md
+├── firmware/               # ESP32-S3 C++/Arduino/ESP-IDF codebase
+│   ├── include/            # Header files (.h)
+│   ├── src/                # Sensor reading, BLE/Wi-Fi, & TinyML model inference (.cpp)
+│   ├── lib/                # Custom hardware drivers (IMU, pressure, temp sensors)
+│   └── platformio.ini      # PlatformIO configuration file
+├── software/               # Application Layer (Web & Backend)
+│   ├── backend/            # REST API / MQTT / Database server
+│   │   ├── src/
+│   │   │   ├── controllers/
+│   │   │   ├── models/
+│   │   │   ├── routes/
+│   │   │   ├── services/   # Data processing & telemetry ingestion
+│   │   │   └── app.js
+│   │   ├── .env.example
+│   │   └── package.json
+│   └── frontend/           # Remote Rehabilitation Web Dashboard (React + Vite)
+│       ├── public/
+│       ├── src/
+│       │   ├── assets/
+│       │   ├── components/  # Dashboard UI (charts, sensor widgets, alerts)
+│       │   ├── hooks/
+│       │   ├── pages/
+│       │   └── services/    # API & WebSocket client calls
+│       └── package.json
+├── ml_models/              # TinyML model training notebooks (PyTorch/TensorFlow Lite)
+│   ├── datasets/           # Sample sensor dataset files (.csv)
+│   ├── training/           # Model scripts & conversion to TFLite Micro (.h)
+│   └── README.md
+├── .gitignore
+├── LICENSE
+└── README.md
 ```
 
 ### Quick Start Instructions
 
 1. **Firmware (ESP32-S3):**
-   - Built with [ESP-IDF v5.x](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/) or [PlatformIO](https://platformio.org/).
+   - Built with [PlatformIO](https://platformio.org/) or [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/).
    - Connect the ESP32-S3 board via USB-C and run:
      ```bash
-     cd code/firmware
+     cd firmware
      pio run -t upload
      ```
-2. **Cloud Backend:**
-   - Requires Python 3.10+ and PostgreSQL.
-   - Run migrations and start development server:
+2. **Software Backend:**
+   - Requires Node.js 18+.
+   - Install dependencies, configure environment, and run:
      ```bash
-     cd code/backend
-     python -m venv venv && source venv/bin/activate
-     pip install -r requirements.txt
-     python manage.py migrate
-     python manage.py runserver
-     ```
-3. **Clinician Dashboard:**
-   - Node.js 18+ required:
-     ```bash
-     cd code/dashboard
+     cd software/backend
+     cp .env.example .env
      npm install
      npm run dev
+     ```
+3. **Software Frontend Dashboard:**
+   - React + Vite + TypeScript web dashboard:
+     ```bash
+     cd software/frontend
+     cp .env.example .env
+     npm install
+     npm run dev
+     ```
+4. **TinyML Training Pipeline:**
+   - Train and export models to TFLite Micro C headers:
+     ```bash
+     cd ml_models/training
+     python3 -m venv .venv && source .venv/bin/activate
+     pip install -r requirements.txt
+     python train_rehab_classifier.py
      ```
 
 ---
