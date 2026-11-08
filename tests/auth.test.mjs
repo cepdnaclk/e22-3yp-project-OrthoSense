@@ -170,3 +170,22 @@ for (const status of ["loading", "unauthenticated", "error", "wrong-role", "auth
   const { load } = runtime(async () => json({ count: 2, results: [], next: "https://untrusted.example/page" }));
   await assert.rejects(load("lib/services/api.ts").patientsApi.getAll(), /another origin/);
  });
+
+test("patient profile writes preserve supported personal fields and return saved identity", async () => {
+  let sent;
+  const {load}=runtime(async (url,options) => {
+    if(url.endsWith("/auth/csrf/")) return json({csrfToken:"token"});
+    sent=JSON.parse(options.body);
+    return json({...rawUser,role:"PATIENT",full_name:sent.full_name});
+  });
+  const saved=await load("lib/services/api.ts").patientProfileApi.update({full_name:"Patient name",emergency_contact_phone:"123"});
+  assert.equal(saved.full_name,"Patient name");
+  assert.equal(sent.emergency_contact_phone,"123");
+  assert.equal(sent.role,undefined);
+});
+test("exercise catalog preserves server defaults and real media URLs", async () => {
+  const {load}=runtime(async () => json([{id:"exercise",name:"Movement",target_joint:"Knee",description:"Instructions",target_angle_min_deg:0,target_angle_max_deg:80,default_repetitions:6,default_sets:2,rest_interval_seconds:45,video_url:"https://example.test/demo.mp4",thumbnail_url:""}]));
+  const exercises=await load("lib/services/api.ts").exercisesApi.getAll();
+  assert.equal(exercises[0].defaultSets,2);
+  assert.equal(exercises[0].videoUrl,"https://example.test/demo.mp4");
+});

@@ -177,14 +177,14 @@ Phase acceptance: submitted values survive a POST/GET round trip exactly, create
 
 Primary files: `app/doctor/patients/[id]/plan/page.tsx`, plan services, `backend/apps/exercises/`.
 
-- [ ] P01 [Backend] Implement validated nested prescription writes for drafts, including add/edit/remove/order; current normal plan serializer exposes prescriptions read-only.
-- [ ] P02 [Frontend] Implement Save Draft using create/update services; persist clinical notes, sets, reps, ROM targets, rest intervals and instructions.
-- [ ] P03 [Both] Implement revision as a new draft with a new version/ID; retain the published prescription and session references.
-- [ ] P04 [Frontend] Publish only a successfully saved server draft; require an ID, handle dirty edits and reflect the canonical publish response.
-- [ ] P05 [Backend] Validate patient role/assignment, exercise existence, nonempty items and numeric limits before writes; make multi-item creation and publish/archive/version allocation transactional.
-- [ ] P06 [Backend] Enforce immutable published/archived content across PATCH, PUT, DELETE, prescription modifications and status/version changes; make the publish transition explicit.
-- [ ] P07 [Both] Separate patient active-published-plan lookup from clinician draft/history lookup; return a truthful no-active-plan state instead of a draft fallback.
-- [ ] P08 [Frontend] Reload the patient-visible plan after successful publication; expose saved version/date/author accurately.
+- [x] P01 [Backend] Implement validated nested prescription writes for drafts, including add/edit/remove/order; current normal plan serializer exposes prescriptions read-only.
+- [x] P02 [Frontend] Implement Save Draft using create/update services; persist clinical notes, sets, reps, ROM targets, rest intervals and instructions.
+- [x] P03 [Both] Implement revision as a new draft with a new version/ID; retain the published prescription and session references.
+- [x] P04 [Frontend] Publish only a successfully saved server draft; require an ID, handle dirty edits and reflect the canonical publish response.
+- [x] P05 [Backend] Validate patient role/assignment, exercise existence, nonempty items and numeric limits before writes; make multi-item creation and publish/archive/version allocation transactional.
+- [x] P06 [Backend] Enforce immutable published/archived content across PATCH, PUT, DELETE, prescription modifications and status/version changes; make the publish transition explicit.
+- [x] P07 [Both] Separate patient active-published-plan lookup from clinician draft/history lookup; return a truthful no-active-plan state instead of a draft fallback.
+- [x] P08 [Frontend] Reload the patient-visible plan after successful publication; expose saved version/date/author accurately.
 
 Phase acceptance: edit/save/reload preserves all items; publishing exposes exactly those saved values to the assigned patient; revising leaves the prior version intact.
 
@@ -192,15 +192,15 @@ Phase acceptance: edit/save/reload preserves all items; publishing exposes exact
 
 Primary files: `app/patient/dashboard/page.tsx`, `app/patient/exercises/page.tsx`, `app/patient/profile/page.tsx`, accounts serializers/views.
 
-- [ ] U01 [Both] Expose and map own demographic/profile data and clinician/device assignments; add a restricted update endpoint for editable personal/emergency-contact fields.
+- [x] U01 [Both] Expose and map own demographic/profile data and clinician/device assignments; add a restricted update endpoint for editable personal/emergency-contact fields.
 - [ ] U02 [Both] Persist supported preferences. Add fields/endpoints for phone, address, emergency relationship and notification choices only when retained in the product; the current model does not store every displayed field.
-- [ ] U03 [Frontend] Replace profile timers with real update requests, validation errors and confirmed success; keep diagnosis, recovery protocol and prescribed limits under clinician control.
-- [ ] U04 [Frontend] Bind dashboard greeting, recovery week, clinician, published-plan metadata and prescribed exercise cards to the current user's data.
+- [x] U03 [Frontend] Replace profile timers with real update requests, validation errors and confirmed success; keep diagnosis, recovery protocol and prescribed limits under clinician control.
+- [x] U04 [Frontend] Bind dashboard greeting, recovery week, clinician, published-plan metadata and prescribed exercise cards to the current user's data.
 - [ ] U05 [Both] Define and calculate daily completion, streak, adherence and ROM trends using actual prescriptions, dates/timezone and completed sessions; add scoped aggregate APIs as needed.
-- [ ] U06 [Frontend] Replace all fixed dashboard chart paths/values with actual results and unavailable/insufficient-data states.
-- [ ] U07 [Frontend] Load patient exercises from the published plan with real instructions/sets/reps/limits; carry the selected prescription ID into the recorder.
-- [ ] U08 [Frontend] Use real exercise media from catalog data, or show no media; replace pretend video playback/progress.
-- [ ] U09 [Frontend] Replace fixed device/sensor/EMG/load indicators in patient screens with supported measured data; show unsupported channels as unavailable.
+- [x] U06 [Frontend] Replace all fixed dashboard chart paths/values with actual results and unavailable/insufficient-data states.
+- [x] U07 [Frontend] Load patient exercises from the published plan with real instructions/sets/reps/limits; carry the selected prescription ID into the recorder.
+- [x] U08 [Frontend] Use real exercise media from catalog data, or show no media; replace pretend video playback/progress.
+- [x] U09 [Frontend] Replace fixed device/sensor/EMG/load indicators in patient screens with supported measured data; show unsupported channels as unavailable.
 
 Phase acceptance: two different patients see their own profile, prescription, history and hardware; edits survive reload; a patient without a plan/device sees an explicit empty state.
 
@@ -287,6 +287,10 @@ Primary files: `app/admin/`, account/device APIs, `backend/apps/analytics/views.
 - [ ] V12 Update root setup/run/API documentation and project-site architecture claims to match implemented session auth, transport, storage and hardware. Label TinyML, BLE/mobile buffering, WebSockets, encryption and clinical-performance claims as targets unless verified.
 - [ ] V13 Run lint, typecheck, build, backend tests, migration consistency, schema validation and browser acceptance checks; retain results by environment.
 - [ ] V14 Separately validate compiled firmware, live gateway/device transport, physical sensor calibration and disconnect behavior. Passing local web/API tests does not establish physical performance.
+
+Phase 3 completion: see [persisted plan summary and manual tests](PHASE_3_PLANS_HANDOFF.md).
+
+Phase 4 implementation: see [patient interface handoff](PHASE_4_PATIENT_HANDOFF.md). Unsupported preferences are removed; schedule-dependent adherence calculations require a future schedule contract.
 
 ## Suggested implementation order
 

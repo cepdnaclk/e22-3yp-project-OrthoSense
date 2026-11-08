@@ -124,8 +124,8 @@ export const plansApi = {
     };
   },
 
-  getAll: async (): Promise<ExercisePlan[]> => {
-    const list = await allPages<PlanDto>("/plans/");
+  getAll: async (patientId?: string): Promise<ExercisePlan[]> => {
+    const list = await allPages<PlanDto>(patientId ? `/plans/?patient_id=${encodeURIComponent(patientId)}` : "/plans/");
     return list.map((p) => ({
       id: p.id,
       patientId: p.patient,
@@ -155,6 +155,8 @@ export const plansApi = {
     return apiClient.post("/plans/", data);
   },
 
+  update: (id: string, data: { clinical_notes: string; items: PrescriptionInput[] }): Promise<PlanDto> => apiClient.patch(`/plans/${id}/`, data),
+
   publish: async (id: string): Promise<PlanDto> => {
     return apiClient.post(`/plans/${id}/publish/`);
   },
@@ -170,10 +172,13 @@ export const exercisesApi = {
       id: e.id,
       name: e.name,
       targetJoint: e.target_joint,
+      videoUrl: e.video_url,
+      thumbnailUrl: e.thumbnail_url,
       description: e.description,
       targetAngleMinDeg: e.target_angle_min_deg,
       targetAngleMaxDeg: e.target_angle_max_deg,
       defaultRepetitions: e.default_repetitions,
+      defaultSets: e.default_sets,
       restIntervalSeconds: e.rest_interval_seconds,
     }));
   },
@@ -323,4 +328,15 @@ export const healthApi = {
   getHealth: async (): Promise<HealthDto> => {
     return apiClient.get("/health/");
   },
+};
+
+export interface PatientProfileUpdate {
+  full_name?: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  haptic_alerts_enabled?: boolean;
+}
+export const patientProfileApi = {
+  get: (): Promise<ApiUser> => apiClient.get("/auth/me/"),
+  update: (data: PatientProfileUpdate): Promise<ApiUser> => apiClient.patch("/auth/me/", data),
 };

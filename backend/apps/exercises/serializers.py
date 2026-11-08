@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from django.db import transaction
+from django.db.models import Max
 from .models import ExerciseDefinition, PlanVersion, ExercisePrescription
 from apps.accounts.models import User
 from apps.accounts.permissions import can_access_patient
@@ -70,13 +72,26 @@ class PlanVersionSerializer(StrictWriteFieldsMixin, serializers.ModelSerializer)
 
 class PrescriptionItemInputSerializer(serializers.Serializer):
     exercise_id = serializers.UUIDField()
-    target_repetitions = serializers.IntegerField(default=10)
-    target_sets = serializers.IntegerField(default=3)
+    target_repetitions = serializers.IntegerField(default=10, min_value=1)
+    target_sets = serializers.IntegerField(default=3, min_value=1)
     target_flexion_deg = serializers.FloatField(default=105.0)
     target_extension_deg = serializers.FloatField(default=0.0)
-    rest_interval_seconds = serializers.IntegerField(default=60)
-    order = serializers.IntegerField(default=0)
+    rest_interval_seconds = serializers.IntegerField(default=60, min_value=0)
+    order = serializers.IntegerField(default=0, min_value=0)
     notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+    def validate_exercise_id(self, value):
+        if not ExerciseDefinition.objects.filter(pk=value).exists():
+            raise serializers.ValidationError("Exercise not found.")
+        return value
+
+    def validate(self, attrs):
+        import math
+        low, high = attrs["target_extension_deg"], attrs["target_flexion_deg"]
+        if not math.isfinite(low) or not math.isfinite(high) or low > high:
+            raise serializers.ValidationError("Extension must not exceed flexion; angles must be finite.")
+        return attrs
 
 
 class PlanVersionCreateSerializer(StrictWriteFieldsMixin, serializers.ModelSerializer):
@@ -98,36 +113,44 @@ class PlanVersionCreateSerializer(StrictWriteFieldsMixin, serializers.ModelSeria
     def to_representation(self, instance):
         return PlanVersionSerializer(instance, context=self.context).data
 
+    @transaction.atomic
     def create(self, validated_data):
-        items_data = validated_data.pop("items", [])
-        patient = validated_data["patient"]
-        clinician = self.context["request"].user
-
-        # Determine next version number
-        latest_version = PlanVersion.objects.filter(patient=patient).order_by("-version_number").first()
-        version_num = (latest_version.version_number + 1) if latest_version else 1
-
-        plan = PlanVersion.objects.create(
-            patient=patient,
-            authored_by=clinician,
-            version_number=version_num,
-            status=PlanVersion.Status.DRAFT,
-            clinical_notes=validated_data.get("clinical_notes", ""),
-        )
-
-        for item in items_data:
-            exercise = ExerciseDefinition.objects.get(id=item["exercise_id"])
-            ExercisePrescription.objects.create(
-                plan_version=plan,
-                exercise=exercise,
-                target_repetitions=item.get("target_repetitions", 10),
-                target_sets=item.get("target_sets", 3),
-                target_flexion_deg=item.get("target_flexion_deg", 105.0),
-                target_extension_deg=item.get("target_extension_deg", 0.0),
-                rest_interval_seconds=item.get("rest_interval_seconds", 60),
-                order=item.get("order", 0),
-                notes=item.get("notes", ""),
-            )
-
+        items = validated_data.pop("items", [])
+        patient = User.objects.select_for_update().get(pk=validated_data["patient"].pk)
+        maximum = PlanVersion.objects.filter(patient=patient).aggregate(value=Max("version_number"))["value"] or 0
+        plan = PlanVersion.objects.create(patient=patient, authored_by=self.context["request"].user,
+            version_number=maximum + 1, clinical_notes=validated_data.get("clinical_notes", ""))
+        replace_items(plan, items)
         return plan
 
+
+def replace_items(plan, items):
+    plan.prescriptions.all().delete()
+    for index, item in enumerate(items):
+        values = dict(item)
+        values["order"] = index
+        ExercisePrescription.objects.create(plan_version=plan, **values)
+
+
+class PlanDraftUpdateSerializer(StrictWriteFieldsMixin, serializers.ModelSerializer):
+    items = PrescriptionItemInputSerializer(many=True, required=False, write_only=True)
+
+    class Meta:
+        model = PlanVersion
+        fields = ["clinical_notes", "items"]
+
+    def to_representation(self, instance):
+        return PlanVersionSerializer(instance, context=self.context).data
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        instance = PlanVersion.objects.select_for_update().get(pk=instance.pk)
+        if instance.status != PlanVersion.Status.DRAFT:
+            raise serializers.ValidationError("Only drafts can be edited.")
+        items = validated_data.pop("items", None)
+        if "clinical_notes" in validated_data:
+            instance.clinical_notes = validated_data["clinical_notes"]
+        instance.save()
+        if items is not None:
+            replace_items(instance, items)
+        return instance

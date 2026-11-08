@@ -59,6 +59,9 @@ export interface ExerciseDefinition {
   targetAngleMinDeg: number;
   targetAngleMaxDeg: number;
   defaultRepetitions: number;
+  defaultSets?: number;
+  videoUrl?: string;
+  thumbnailUrl?: string;
   restIntervalSeconds: number;
 }
 
