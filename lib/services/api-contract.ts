@@ -1,6 +1,6 @@
 import type { ApiUser } from "./auth-contract";
 import type { ExerciseSession, AuditLogEntry } from "@/lib/types";
-export interface PatientDto extends ApiUser { patient_profile?: { diagnosis: string } | null; }
+export type PatientDto = ApiUser;
 export interface ExerciseDto { id: string; name: string; target_joint: string; description: string; target_angle_min_deg: number; target_angle_max_deg: number; default_repetitions: number; default_sets: number; rest_interval_seconds: number; video_url: string; thumbnail_url: string; }
 export interface PrescriptionInput { exercise_id: string; target_repetitions?: number; target_sets?: number; target_flexion_deg?: number; target_extension_deg?: number; rest_interval_seconds?: number; order?: number; notes?: string; }
 export interface PrescriptionDto { id: string; exercise: ExerciseDto; target_repetitions: number; target_sets: number; target_flexion_deg: number; target_extension_deg: number; rest_interval_seconds: number; notes: string; }

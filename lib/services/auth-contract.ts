@@ -9,6 +9,11 @@ export interface ApiUser {
   department: string;
   is_active: boolean;
   created_at: string;
+  patient_profile?: {
+    date_of_birth: string | null; diagnosis: string; surgical_protocol: string; surgery_date: string | null;
+    recovery_week: number; target_rom_flexion: number; target_rom_extension: number;
+    emergency_contact_name: string; emergency_contact_phone: string; haptic_alerts_enabled: boolean;
+  } | null;
   assigned_doctor?: { id: string; fullName: string } | null;
   assigned_device?: { id: string; identifier: string } | null;
 }

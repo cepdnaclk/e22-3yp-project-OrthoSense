@@ -1,4 +1,5 @@
 from django.utils import timezone
+from django.db import transaction
 from rest_framework import viewsets, permissions, status, views
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -9,6 +10,7 @@ from .serializers import (
     ExerciseDefinitionSerializer,
     PlanVersionSerializer,
     PlanVersionCreateSerializer,
+    PlanDraftUpdateSerializer,
 )
 from apps.accounts.models import User, AuditLogEntry
 from apps.accounts.permissions import IsClinician, IsClinicalUser, IsAssignedClinicianOrSelf, can_access_patient
@@ -45,9 +47,17 @@ class PlanVersionViewSet(ScopedPatientQuerySetMixin, viewsets.ModelViewSet):
             return [IsClinician(), IsAssignedClinicianOrSelf()]
         return super().get_permissions()
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.request.user.role == User.Role.PATIENT:
+            qs = qs.filter(status=PlanVersion.Status.PUBLISHED)
+        return qs
+
     def get_serializer_class(self):
         if self.action == "create":
             return PlanVersionCreateSerializer
+        if self.action in ("update", "partial_update"):
+            return PlanDraftUpdateSerializer
         return PlanVersionSerializer
 
     def update(self, request, *args, **kwargs):
@@ -65,17 +75,22 @@ class PlanVersionViewSet(ScopedPatientQuerySetMixin, viewsets.ModelViewSet):
         return super().destroy(request, *args, **kwargs)
 
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated, IsClinician])
+    @transaction.atomic
     def publish(self, request, pk=None):
         """
         POST /api/v1/plans/{id}/publish/
         Freezes the draft plan, stamps it as PUBLISHED, and archives any older published version.
         """
-        plan = self.get_object()
+        scoped = self.get_object()
+        User.objects.select_for_update().get(pk=scoped.patient_id)
+        plan = PlanVersion.objects.select_for_update().get(pk=scoped.pk)
         if plan.status == PlanVersion.Status.ARCHIVED:
             return Response({"detail": "An archived plan cannot be republished."}, status=status.HTTP_400_BAD_REQUEST)
         if plan.status == PlanVersion.Status.PUBLISHED:
             return Response(PlanVersionSerializer(plan).data, status=status.HTTP_200_OK)
 
+        if not plan.prescriptions.exists():
+            return Response({"detail": "Add at least one exercise before publishing."}, status=400)
         plan.publish()
 
         AuditLogEntry.objects.create(

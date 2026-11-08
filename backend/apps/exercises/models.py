@@ -62,17 +62,12 @@ class PlanVersion(models.Model):
         # Enforce legal immutability of published medical records
         if self.pk:
             original = PlanVersion.objects.filter(pk=self.pk).first()
-            if original and original.status == self.Status.PUBLISHED:
-                # Disallow modifying any content if it was already published
-                if self.status != self.Status.ARCHIVED and (
-                    self.clinical_notes != original.clinical_notes or
-                    self.patient_id != original.patient_id or
-                    self.authored_by_id != original.authored_by_id
-                ):
-                    raise ValidationError(
-                        "Published exercise plans are legally immutable. "
-                        "To revise this prescription, please author a new Draft version."
-                    )
+            if original and original.status in (self.Status.PUBLISHED, self.Status.ARCHIVED):
+                protected = ("clinical_notes", "patient_id", "authored_by_id", "version_number", "published_at")
+                changed = any(getattr(self, field) != getattr(original, field) for field in protected)
+                legal_status = self.status == original.status or (original.status == self.Status.PUBLISHED and self.status == self.Status.ARCHIVED)
+                if changed or not legal_status:
+                    raise ValidationError("Published and archived plans are immutable. Create a new draft version.")
 
     def save(self, *args, **kwargs):
         self.clean()
@@ -114,7 +109,10 @@ class ExercisePrescription(models.Model):
         return f"{self.exercise.name}: {self.target_sets}x{self.target_repetitions} (Max {self.target_flexion_deg}°)"
 
     def clean(self):
-        if self.plan_version and self.plan_version.status == PlanVersion.Status.PUBLISHED:
+        original = ExercisePrescription.objects.filter(pk=self.pk).select_related("plan_version").first()
+        if original and original.plan_version.status != PlanVersion.Status.DRAFT:
+            raise ValidationError("Published and archived prescriptions are immutable.")
+        if self.plan_version and self.plan_version.status != PlanVersion.Status.DRAFT:
             raise ValidationError("Cannot modify exercise prescriptions of an already-published plan.")
 
     def save(self, *args, **kwargs):

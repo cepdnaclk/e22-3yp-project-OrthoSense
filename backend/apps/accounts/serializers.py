@@ -127,3 +127,10 @@ class AuthSessionResponseSerializer(serializers.Serializer):
     csrfToken = serializers.CharField()
     expiresAt = serializers.CharField()
 
+
+
+class PatientPreferencesUpdateSerializer(StrictWriteFieldsMixin, serializers.Serializer):
+    full_name = serializers.CharField(max_length=255, required=False)
+    emergency_contact_name = serializers.CharField(max_length=255, allow_blank=True, required=False)
+    emergency_contact_phone = serializers.CharField(max_length=50, allow_blank=True, required=False)
+    haptic_alerts_enabled = serializers.BooleanField(required=False)

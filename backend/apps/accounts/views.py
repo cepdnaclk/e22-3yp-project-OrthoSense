@@ -153,7 +153,36 @@ class MeView(views.APIView):
     )
     def get(self, request):
         serializer_class = PatientDetailSerializer if request.user.role == User.Role.PATIENT else UserSerializer
-        response = Response(serializer_class(request.user).data)
+        response = Response(serializer_class(User.objects.get(pk=request.user.pk)).data)
+        response["Cache-Control"] = "no-store"
+        return response
+
+    def patch(self, request):
+        from django.db import transaction
+        from .serializers import PatientPreferencesUpdateSerializer
+        from .models import PatientProfile
+        if request.user.role != User.Role.PATIENT:
+            return Response({"detail": "Patient profile access only."}, status=403)
+        serializer = PatientPreferencesUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        values = dict(serializer.validated_data)
+        with transaction.atomic():
+            user = User.objects.select_for_update().get(pk=request.user.pk)
+            profile = PatientProfile.objects.select_for_update().filter(user=user).first()
+            personal = {key: value for key, value in values.items() if key != "full_name"}
+            if personal and profile is None:
+                return Response({"detail": "Ask your clinician to create your patient profile before updating preferences."}, status=400)
+            if "full_name" in values:
+                user.full_name = values["full_name"]
+                user.save(update_fields=["full_name", "updated_at"])
+            if personal:
+                for key, value in personal.items():
+                    setattr(profile, key, value)
+                profile.save(update_fields=[*personal, "updated_at"])
+            AuditLogEntry.objects.create(actor=user, actor_name=user.full_name, actor_role=user.role,
+                action="PATIENT_PROFILE_UPDATED", target_type="user", target_id=str(user.pk),
+                details="Patient updated personal profile/preferences.")
+        response = Response(PatientDetailSerializer(user).data)
         response["Cache-Control"] = "no-store"
         return response
 
