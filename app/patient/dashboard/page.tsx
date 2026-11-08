@@ -24,17 +24,17 @@ export default function PatientDashboardPage() {
         {/* ========================================================= */}
         {/* TOP HERO BANNER WITH SMART BRACE BACKGROUND & WHITE SHADOW*/}
         {/* ========================================================= */}
-        <div className="relative overflow-hidden bg-[#035E54] rounded-2xl p-6 sm:p-7 text-white shadow-xl border border-teal-600/30">
-          {/* Background Image Layer with Clinical Green Gradient Overlay */}
+        <div className="relative overflow-hidden bg-slate-900 rounded-2xl p-6 sm:p-7 text-white shadow-xl border border-slate-200">
+          {/* Wallpaper with neutral contrast overlay */}
           <div className="absolute inset-0 z-0 pointer-events-none">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/images/smart-knee-brace.jpg"
               alt="Bionic-X Smart Knee Brace Telemetry"
-              className="w-full h-full object-cover object-right md:object-[80%_center] opacity-90 mix-blend-luminosity filter brightness-110 contrast-125"
+              className="w-full h-full object-cover object-right md:object-[80%_center]"
             />
-            {/* Multi-stop gradient ensuring high-contrast readability on text */}
-            <div className="absolute inset-0 bg-gradient-to-r from-[#035E54] via-[#035E54]/85 to-transparent" />
+            {/* Neutral overlay keeps white text readable without tinting the wallpaper green */}
+            <div className="absolute inset-0 bg-black/45" />
           </div>
 
           {/* Banner Content (Elevated with Z-Index and White Shadow Glow) */}

@@ -23,6 +23,9 @@ class ExerciseDefinition(models.Model):
     rest_interval_seconds = models.IntegerField(default=60)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        ordering = ["name"]
+
     def __str__(self):
         return f"{self.name} ({self.code})"
 

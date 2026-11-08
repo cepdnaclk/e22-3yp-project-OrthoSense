@@ -1,7 +1,7 @@
 import math
 from django.db import transaction, IntegrityError
 from django.utils import timezone
-from rest_framework import viewsets, permissions, status, views
+from rest_framework import viewsets, permissions, status, views, mixins
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
@@ -12,25 +12,36 @@ from .serializers import (
     SessionCreateSerializer,
     SessionReviewSerializer,
     TelemetryIngestPayloadSerializer,
+    PatientSessionUpdateSerializer,
 )
 from apps.devices.models import Device
-from apps.accounts.permissions import IsClinician, IsAssignedClinicianOrSelf
+from apps.accounts.permissions import IsClinician, IsPatient, IsClinicalUser, IsAssignedClinicianOrSelf
 from apps.accounts.mixins import ScopedPatientQuerySetMixin
 from apps.accounts.models import AuditLogEntry
 from apps.analytics.services.downsampler import downsample_lttb
+from apps.devices.authentication import DeviceBearerAuthentication
 
 
-class SessionViewSet(ScopedPatientQuerySetMixin, viewsets.ModelViewSet):
+class SessionViewSet(ScopedPatientQuerySetMixin, mixins.CreateModelMixin, mixins.UpdateModelMixin, viewsets.ReadOnlyModelViewSet):
     """
     Rehabilitation exercise session management and clinician review sign-offs.
     """
     queryset = Session.objects.all().select_related("patient", "plan_version", "device").prefetch_related("review_notes__clinician")
     patient_field_lookup = "patient"
-    permission_classes = [permissions.IsAuthenticated, IsAssignedClinicianOrSelf]
+    permission_classes = [IsClinicalUser, IsAssignedClinicianOrSelf]
+
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update"):
+            return [IsPatient(), IsAssignedClinicianOrSelf()]
+        if self.action == "review":
+            return [IsClinician(), IsAssignedClinicianOrSelf()]
+        return super().get_permissions()
 
     def get_serializer_class(self):
         if self.action == "create":
             return SessionCreateSerializer
+        if self.action in ("update", "partial_update"):
+            return PatientSessionUpdateSerializer
         return SessionSerializer
 
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated, IsClinician])
@@ -147,6 +158,7 @@ class TelemetryIngestView(views.APIView):
     Enforces device token authentication, payload schema, and (device, boot_id, sequence_number) idempotency.
     """
     permission_classes = [permissions.IsAuthenticated]
+    authentication_classes = [DeviceBearerAuthentication]
 
     @extend_schema(
         request=TelemetryIngestPayloadSerializer,
@@ -159,31 +171,20 @@ class TelemetryIngestView(views.APIView):
         data = serializer.validated_data
 
         device_identifier = data["device_id"]
-        # Resolve device
-        device = Device.objects.filter(device_identifier=device_identifier).first()
-        if not device and hasattr(request, "auth") and isinstance(request.auth, Device):
-            device = request.auth
-
-        if not device:
-            # Auto-register device or return 404
-            device = Device.objects.create(
-                device_identifier=device_identifier,
-                mac_address="AA:BB:CC:DD:EE:FF",
-                status=Device.Status.ACTIVE,
-            )
+        device = request.auth
+        if not isinstance(device, Device) or device.device_identifier != device_identifier or device.status != Device.Status.ACTIVE:
+            return Response({"detail": "Device identity does not match an active credential."}, status=status.HTTP_403_FORBIDDEN)
 
         session_id = data["session_id"]
-        session = Session.objects.filter(id=session_id).first()
+        session = Session.objects.filter(
+            id=session_id, device=device, patient__is_active=True,
+            patient__device_assignments__device=device,
+            patient__device_assignments__active=True,
+        ).first()
         if not session:
-            # Auto-bind session to device's actively assigned patient
-            assigned = device.assignments.filter(active=True).first()
-            patient_user = assigned.patient if assigned else request.user
-            session = Session.objects.create(
-                id=session_id,
-                patient=patient_user,
-                device=device,
-                status=Session.Status.IN_PROGRESS,
-            )
+            return Response({"detail": "Assigned session not found."}, status=status.HTTP_404_NOT_FOUND)
+        if session.status != Session.Status.IN_PROGRESS:
+            return Response({"detail": "Session is not recording."}, status=status.HTTP_409_CONFLICT)
 
         boot_id = data["boot_id"]
         seq_num = data["sequence_number"]
@@ -197,6 +198,8 @@ class TelemetryIngestView(views.APIView):
         ).first()
 
         if existing:
+            if existing.session_id != session.pk:
+                return Response({"detail": "Batch belongs to another session."}, status=status.HTTP_409_CONFLICT)
             return Response(
                 {"status": "already_stored", "batch_sequence": seq_num},
                 status=status.HTTP_200_OK

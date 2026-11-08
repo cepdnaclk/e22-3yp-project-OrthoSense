@@ -2,6 +2,19 @@ from rest_framework import serializers
 from .models import User, PatientProfile, ClinicianProfile, ClinicianAssignment, AuditLogEntry
 
 
+class StrictWriteFieldsMixin:
+    """Reject attempts to submit protected or unsupported fields explicitly."""
+
+    def to_internal_value(self, data):
+        allowed = {name for name, field in self.fields.items() if not field.read_only}
+        forbidden = set(data) - allowed
+        if forbidden:
+            raise serializers.ValidationError({
+                name: "This field cannot be written here." for name in sorted(forbidden)
+            })
+        return super().to_internal_value(data)
+
+
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
@@ -49,6 +62,7 @@ class PatientDetailSerializer(serializers.ModelSerializer):
             "role",
             "department",
             "patient_profile",
+            "is_active",
             "assigned_doctor",
             "assigned_device",
             "created_at",
@@ -98,13 +112,18 @@ class AuditLogSerializer(serializers.ModelSerializer):
 
 
 class LoginRequestSerializer(serializers.Serializer):
-    email = serializers.CharField(required=True)
-    password = serializers.CharField(required=False, default="")
-    role = serializers.CharField(required=False, default="")
+    email = serializers.CharField(required=False, allow_blank=True, default="")
+    username = serializers.CharField(required=False, allow_blank=True, default="")
+    password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate(self, attrs):
+        if not (attrs.get("email", "").strip() or attrs.get("username", "").strip()):
+            raise serializers.ValidationError("Email or username is required.")
+        return attrs
 
 
 class AuthSessionResponseSerializer(serializers.Serializer):
     user = UserSerializer()
-    token = serializers.CharField()
+    csrfToken = serializers.CharField()
     expiresAt = serializers.CharField()
 

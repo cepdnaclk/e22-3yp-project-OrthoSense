@@ -7,6 +7,8 @@ from apps.accounts.views import (
     LoginView,
     LogoutView,
     MeView,
+    CsrfTokenView,
+    RefreshView,
     PatientViewSet,
     AuditLogViewSet,
 )
@@ -39,6 +41,8 @@ urlpatterns = [
     path("api/v1/health/", SystemHealthView.as_view(), name="health-check"),
 
     # Identity and Session Authentication
+    path("api/v1/auth/csrf/", CsrfTokenView.as_view(), name="auth-csrf"),
+    path("api/v1/auth/refresh/", RefreshView.as_view(), name="auth-refresh"),
     path("api/v1/auth/login/", LoginView.as_view(), name="auth-login"),
     path("api/v1/auth/logout/", LogoutView.as_view(), name="auth-logout"),
     path("api/v1/auth/me/", MeView.as_view(), name="auth-me"),

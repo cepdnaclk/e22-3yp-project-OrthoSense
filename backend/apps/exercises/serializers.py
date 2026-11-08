@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from .models import ExerciseDefinition, PlanVersion, ExercisePrescription
 from apps.accounts.models import User
+from apps.accounts.permissions import can_access_patient
+from apps.accounts.serializers import StrictWriteFieldsMixin
 
 
 class ExerciseDefinitionSerializer(serializers.ModelSerializer):
@@ -42,7 +44,7 @@ class ExercisePrescriptionSerializer(serializers.ModelSerializer):
         ]
 
 
-class PlanVersionSerializer(serializers.ModelSerializer):
+class PlanVersionSerializer(StrictWriteFieldsMixin, serializers.ModelSerializer):
     prescriptions = ExercisePrescriptionSerializer(many=True, read_only=True)
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     doctor_name = serializers.CharField(source="authored_by.full_name", read_only=True)
@@ -63,6 +65,7 @@ class PlanVersionSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+        read_only_fields = [name for name in fields if name != "clinical_notes"]
 
 
 class PrescriptionItemInputSerializer(serializers.Serializer):
@@ -76,7 +79,7 @@ class PrescriptionItemInputSerializer(serializers.Serializer):
     notes = serializers.CharField(required=False, allow_blank=True, default="")
 
 
-class PlanVersionCreateSerializer(serializers.ModelSerializer):
+class PlanVersionCreateSerializer(StrictWriteFieldsMixin, serializers.ModelSerializer):
     items = PrescriptionItemInputSerializer(many=True, required=False, write_only=True)
 
     class Meta:
@@ -86,6 +89,14 @@ class PlanVersionCreateSerializer(serializers.ModelSerializer):
             "clinical_notes",
             "items",
         ]
+
+    def validate_patient(self, patient):
+        if patient.role != User.Role.PATIENT or not can_access_patient(self.context["request"].user, patient):
+            raise serializers.ValidationError("An actively assigned patient is required.")
+        return patient
+
+    def to_representation(self, instance):
+        return PlanVersionSerializer(instance, context=self.context).data
 
     def create(self, validated_data):
         items_data = validated_data.pop("items", [])

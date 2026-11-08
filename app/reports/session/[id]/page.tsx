@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { sessionsApi } from "@/lib/services/api";
+import { ApiError } from "@/lib/services/api-client";
 import { ExerciseSession } from "@/lib/types";
 import { Printer, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -15,16 +16,23 @@ export default function PrintableReportPage() {
 
   const [session, setSession] = React.useState<ExerciseSession | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState("");
 
   React.useEffect(() => {
     async function fetchSession() {
       if (!sessionId) return;
       setLoading(true);
+      setSession(null);
+      setLoadError("");
       try {
         const data = await sessionsApi.getById(sessionId);
         setSession(data);
-      } catch {
-        // Fallback default
+      } catch (error) {
+        setLoadError(error instanceof ApiError && error.status === 403
+          ? "You do not have permission to view this report."
+          : error instanceof ApiError && error.status === 404
+          ? "Session report not found or unavailable to your account."
+          : "Unable to load this report. Check the connection and retry.");
       } finally {
         setLoading(false);
       }
@@ -48,23 +56,10 @@ export default function PrintableReportPage() {
     );
   }
 
-  const s = session || {
-    id: sessionId || "ses_demo",
-    patientName: "Sarah Connor",
-    patientId: "usr_pat_108",
-    exerciseName: "Active Knee Flexion",
-    planVersion: 2,
-    startedAt: new Date().toISOString(),
-    durationSeconds: 1200,
-    maxFlexionDeg: 98.4,
-    maxExtensionDeg: 4.2,
-    patientReportedReps: 10,
-    sensorEstimatedReps: 10,
-    qualityFlag: "good" as const,
-    doctorReviewed: true,
-    doctorReviewedAt: new Date().toISOString(),
-    reviewNotes: "Full terminal extension verified. Jitter < 0.8%. Patient progressing well in Week 4 protocol.",
-  };
+  if (!session) {
+    return <div role="alert" className="p-8 space-y-4 text-center"><h1 className="text-xl font-bold">Report unavailable</h1><p>{loadError}</p><Link href="/" className="text-teal-700 underline">Return to portal</Link></div>;
+  }
+  const s = session;
 
   return (
     <div className="min-h-screen bg-slate-100 py-8 px-4 print:p-0 print:bg-white text-slate-900">

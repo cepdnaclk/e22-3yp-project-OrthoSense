@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { ApiNotice } from "@/components/auth/ApiNotice";
+import { AuthProvider } from "@/components/auth/AuthProvider";
 
 export const metadata: Metadata = {
   title: "OrthoSense Portal",
@@ -22,7 +24,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col bg-[#F8FAFC] font-sans antialiased text-[#0F172A]">
-        {children}
+        <AuthProvider><ApiNotice />{children}</AuthProvider>
       </body>
     </html>
   );

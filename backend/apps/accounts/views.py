@@ -1,5 +1,5 @@
-from datetime import timedelta
 from django.contrib.auth import login, logout, authenticate
+from django.middleware.csrf import get_token
 from django.utils import timezone
 from rest_framework import views, viewsets, status, permissions
 from rest_framework.response import Response
@@ -15,15 +15,27 @@ from .serializers import (
 )
 from .permissions import IsAdministrator, IsClinician, IsAssignedClinicianOrSelf
 from .mixins import ScopedPatientQuerySetMixin
+from .authentication import BrowserSessionAuthentication, set_token_cookies, validate_token_session
+
+
+class CsrfTokenView(views.APIView):
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        response = Response({"csrfToken": get_token(request._request)})
+        response["Cache-Control"] = "no-store"
+        return response
 
 
 class LoginView(views.APIView):
     """
     POST /api/v1/auth/login/
     Validates user credentials, sets HttpOnly session cookies, and logs the login in the audit log.
-    Supports password or demo role identification.
+    Requires valid credentials, including for demonstration accounts.
     """
     permission_classes = [permissions.AllowAny]
+    authentication_classes = []
 
     @extend_schema(
         request=LoginRequestSerializer,
@@ -32,13 +44,16 @@ class LoginView(views.APIView):
         description="Authenticates clinician, patient, or system admin and establishes an HttpOnly session."
     )
     def post(self, request):
+        # Anonymous logins must also be protected against login CSRF.
+        BrowserSessionAuthentication().enforce_csrf(request)
         serializer = LoginRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        email_or_user = serializer.validated_data["email"].strip().lower()
+        email_or_user = (
+            serializer.validated_data.get("email")
+            or serializer.validated_data.get("username")
+            or ""
+        ).strip().lower()
         password = serializer.validated_data.get("password")
-        role_hint = serializer.validated_data.get("role", "").upper()
-
-        user = None
         # Try finding user by email or username
         if "@" in email_or_user:
             user = User.objects.filter(email__iexact=email_or_user).first()
@@ -46,26 +61,13 @@ class LoginView(views.APIView):
             user = User.objects.filter(username__iexact=email_or_user).first()
 
         # If password provided, verify password
-        if user and password:
-            authenticated = authenticate(request, username=user.email, password=password)
-            if not authenticated:
-                return Response(
-                    {"error": "Invalid email or password."},
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
-            user = authenticated
-        elif not user:
-            # Fallback for demo role switcher if user not found by exact string
-            if "admin" in email_or_user or role_hint == "ADMIN":
-                user = User.objects.filter(role=User.Role.ADMIN).first()
-            elif "patient" in email_or_user or "sarah" in email_or_user or role_hint == "PATIENT":
-                user = User.objects.filter(role=User.Role.PATIENT).first()
-            else:
-                user = User.objects.filter(role=User.Role.CLINICIAN).first()
+        user = authenticate(
+            request, username=user.email if user else email_or_user, password=password,
+        )
 
-        if not user or not user.is_active:
+        if not user or not user.is_active or user.role not in User.Role.values:
             return Response(
-                {"error": "Account not found or inactive."},
+                {"error": "Invalid email or password."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
@@ -85,34 +87,38 @@ class LoginView(views.APIView):
             ip_address=request.META.get("REMOTE_ADDR"),
         )
 
-        expires_at = (timezone.now() + timedelta(days=1)).isoformat()
-        token = f"session_token_{user.id}_{int(timezone.now().timestamp())}"
+        expires_at = request.session.get_expiry_date().isoformat()
 
         response_data = {
             "user": UserSerializer(user).data,
-            "token": token,
+            "csrfToken": get_token(request._request),
             "expiresAt": expires_at,
         }
         response = Response(response_data, status=status.HTTP_200_OK)
-        # Set cookie
-        response.set_cookie(
-            key="orthosense_role",
-            value=user.role.lower(),
-            httponly=False,
-            samesite="Lax",
-        )
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(user)
+        refresh["sid"] = request.session.session_key
+        request.session["refresh_jti"] = refresh["jti"]
+        request.session.save()
+        set_token_cookies(response, refresh.access_token, refresh)
+        response["Cache-Control"] = "no-store"
+        response.delete_cookie("orthosense_role")
         return response
 
 
 class LogoutView(views.APIView):
+    authentication_classes = []
     """
     POST /api/v1/auth/logout/
     Flushes the active session record and removes auth cookies.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
 
     @extend_schema(summary="User Logout", description="Terminates active session.")
     def post(self, request):
+        BrowserSessionAuthentication().enforce_csrf(request)
+        from django.contrib.auth import get_user
+        request.user = get_user(request._request)
         if request.user.is_authenticated:
             AuditLogEntry.objects.create(
                 actor=request.user,
@@ -128,6 +134,8 @@ class LogoutView(views.APIView):
         logout(request)
         response = Response({"detail": "Successfully logged out."}, status=status.HTTP_200_OK)
         response.delete_cookie("orthosense_role")
+        response.delete_cookie("orthosense_access", path="/api/v1/")
+        response.delete_cookie("orthosense_refresh", path="/api/v1/")
         return response
 
 
@@ -144,8 +152,10 @@ class MeView(views.APIView):
         description="Returns detailed profile and active role of the logged-in user."
     )
     def get(self, request):
-        serializer = PatientDetailSerializer(request.user)
-        return Response(serializer.data)
+        serializer_class = PatientDetailSerializer if request.user.role == User.Role.PATIENT else UserSerializer
+        response = Response(serializer_class(request.user).data)
+        response["Cache-Control"] = "no-store"
+        return response
 
 
 class PatientViewSet(ScopedPatientQuerySetMixin, viewsets.ReadOnlyModelViewSet):
@@ -160,6 +170,12 @@ class PatientViewSet(ScopedPatientQuerySetMixin, viewsets.ReadOnlyModelViewSet):
     serializer_class = PatientDetailSerializer
     permission_classes = [permissions.IsAuthenticated, IsAssignedClinicianOrSelf]
     patient_field_lookup = "id"
+    allow_admin_metadata = True
+
+    def get_serializer_class(self):
+        if self.request.user.role == User.Role.ADMIN:
+            return UserSerializer
+        return PatientDetailSerializer
 
 
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
@@ -171,3 +187,35 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = AuditLogSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdministrator]
 
+
+
+class RefreshView(views.APIView):
+    def get_authenticate_header(self, request):
+        return "Bearer"
+
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        from rest_framework_simplejwt.exceptions import TokenError
+        from rest_framework.exceptions import AuthenticationFailed
+        BrowserSessionAuthentication().enforce_csrf(request)
+        try:
+            old = RefreshToken(request.COOKIES.get("orthosense_refresh", ""))
+        except TokenError:
+            raise AuthenticationFailed("Refresh token expired or invalid.")
+        user = User.objects.filter(pk=old["user_id"], is_active=True).first()
+        if not user:
+            raise AuthenticationFailed("Account unavailable.")
+        session = validate_token_session(old, user)
+        if session.get("refresh_jti") != old["jti"]:
+            raise AuthenticationFailed("Refresh token already used.")
+        new = RefreshToken.for_user(user)
+        new["sid"] = old["sid"]
+        session["refresh_jti"] = new["jti"]
+        session.save()
+        response = Response({"detail": "Token refreshed."})
+        response["Cache-Control"] = "no-store"
+        set_token_cookies(response, new.access_token, new)
+        return response

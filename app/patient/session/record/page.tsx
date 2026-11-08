@@ -8,7 +8,8 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Input } from "@/components/ui/Input";
-import { INITIAL_PLANS, INITIAL_DEVICES } from "@/lib/services/mock-data";
+import { plansApi, sessionsApi, devicesApi } from "@/lib/services/api";
+import { ExercisePlanItem } from "@/lib/types";
 import {
   Play,
   Pause,
@@ -24,8 +25,27 @@ import {
 
 export default function RecordSessionPage() {
   const router = useRouter();
-  const plan = INITIAL_PLANS[0];
-  const device = INITIAL_DEVICES[0];
+  const [device, setDevice] = React.useState({
+    serialNumber: "ESP32-S3-ORTHO-092",
+    batteryPercent: 94,
+  });
+
+  React.useEffect(() => {
+    async function loadDevice() {
+      try {
+        const list = await devicesApi.getAll();
+        if (list && list.length > 0) {
+          setDevice({
+            serialNumber: list[0].serialNumber,
+            batteryPercent: list[0].batteryPercent ?? 94,
+          });
+        }
+      } catch {
+        // Fallback default
+      }
+    }
+    loadDevice();
+  }, []);
 
   // Pre-flight checks
   const [preflightPassed, setPreflightPassed] = React.useState(false);
@@ -100,15 +120,28 @@ export default function RecordSessionPage() {
     }
   };
 
-  const handleSubmitSession = () => {
+  const handleSubmitSession = async () => {
     setSubmitting(true);
-    setTimeout(() => {
-      setSubmitting(false);
+    try {
+      await sessionsApi.create({
+        exerciseName: "Active Knee Flexion",
+        targetReps: 10,
+        patientReportedReps: patientReps,
+        sensorEstimatedReps: sensorReps,
+        durationSeconds: elapsedSeconds,
+        maxFlexionDeg: 98.4,
+        maxExtensionDeg: 4.5,
+        status: "completed",
+      });
       setFinishSuccess(true);
       setTimeout(() => {
         router.push("/patient/dashboard");
-      }, 2000);
-    }, 800);
+      }, 1500);
+    } catch {
+      alert("Session was not saved. Check the connection and retry.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const formatTime = (secs: number) => {

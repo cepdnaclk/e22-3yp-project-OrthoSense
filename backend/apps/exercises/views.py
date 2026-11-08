@@ -11,7 +11,7 @@ from .serializers import (
     PlanVersionCreateSerializer,
 )
 from apps.accounts.models import User, AuditLogEntry
-from apps.accounts.permissions import IsClinician, IsAdministrator, IsAssignedClinicianOrSelf
+from apps.accounts.permissions import IsClinician, IsClinicalUser, IsAssignedClinicianOrSelf, can_access_patient
 from apps.accounts.mixins import ScopedPatientQuerySetMixin
 
 
@@ -37,8 +37,13 @@ class PlanVersionViewSet(ScopedPatientQuerySetMixin, viewsets.ModelViewSet):
     queryset = PlanVersion.objects.all().prefetch_related(
         "prescriptions__exercise", "patient", "authored_by"
     )
-    permission_classes = [permissions.IsAuthenticated, IsAssignedClinicianOrSelf]
+    permission_classes = [IsClinicalUser, IsAssignedClinicianOrSelf]
     patient_field_lookup = "patient"
+
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy", "publish"):
+            return [IsClinician(), IsAssignedClinicianOrSelf()]
+        return super().get_permissions()
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -54,6 +59,11 @@ class PlanVersionViewSet(ScopedPatientQuerySetMixin, viewsets.ModelViewSet):
             )
         return super().update(request, *args, **kwargs)
 
+    def destroy(self, request, *args, **kwargs):
+        if self.get_object().status != PlanVersion.Status.DRAFT:
+            return Response({"detail": "Only draft plans can be deleted."}, status=status.HTTP_400_BAD_REQUEST)
+        return super().destroy(request, *args, **kwargs)
+
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated, IsClinician])
     def publish(self, request, pk=None):
         """
@@ -61,8 +71,10 @@ class PlanVersionViewSet(ScopedPatientQuerySetMixin, viewsets.ModelViewSet):
         Freezes the draft plan, stamps it as PUBLISHED, and archives any older published version.
         """
         plan = self.get_object()
+        if plan.status == PlanVersion.Status.ARCHIVED:
+            return Response({"detail": "An archived plan cannot be republished."}, status=status.HTTP_400_BAD_REQUEST)
         if plan.status == PlanVersion.Status.PUBLISHED:
-            return Response({"detail": "Plan is already published."}, status=status.HTTP_200_OK)
+            return Response(PlanVersionSerializer(plan).data, status=status.HTTP_200_OK)
 
         plan.publish()
 
@@ -86,7 +98,7 @@ class MyPlanView(views.APIView):
     GET /api/v1/my-plan/
     Returns the single most recently published PlanVersion for the authenticated patient.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsClinicalUser]
 
     @extend_schema(
         responses={200: PlanVersionSerializer},
@@ -95,27 +107,27 @@ class MyPlanView(views.APIView):
     )
     def get(self, request):
         patient = request.user
-        if patient.role != User.Role.PATIENT:
-            # If clinician or admin views this, allow specifying ?patient_id=...
+        if patient.role == User.Role.CLINICIAN:
             patient_id = request.query_params.get("patient_id")
-            if patient_id:
-                patient = User.objects.filter(id=patient_id, role=User.Role.PATIENT).first()
-            if not patient:
+            if not patient_id:
                 return Response(
                     {"detail": "Clinicians must provide a valid ?patient_id parameter."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+            from django.core.exceptions import ValidationError
+            try:
+                patient = User.objects.filter(id=patient_id, role=User.Role.PATIENT).first()
+            except ValidationError:
+                patient = None
+            if not patient or not can_access_patient(request.user, patient):
+                return Response({"detail": "Patient not found."}, status=status.HTTP_404_NOT_FOUND)
+        elif request.query_params.get("patient_id") not in (None, str(patient.pk)):
+            return Response({"detail": "Patient not found."}, status=status.HTTP_404_NOT_FOUND)
 
         plan = PlanVersion.objects.filter(
             patient=patient,
             status=PlanVersion.Status.PUBLISHED
         ).order_by("-version_number").prefetch_related("prescriptions__exercise").first()
-
-        if not plan:
-            # Fallback to latest draft if no published plan exists
-            plan = PlanVersion.objects.filter(
-                patient=patient
-            ).order_by("-version_number").prefetch_related("prescriptions__exercise").first()
 
         if not plan:
             return Response(

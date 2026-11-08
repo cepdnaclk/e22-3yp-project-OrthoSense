@@ -16,13 +16,12 @@ import {
   ShieldAlert,
   Dumbbell,
   Radio,
-  Sliders,
   ChevronRight,
   TrendingUp,
   UserCircle,
 } from "lucide-react";
 import { User, UserRole } from "@/lib/types";
-import { authService } from "@/lib/services/auth-service";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 interface NavItem {
   name: string;
@@ -55,55 +54,49 @@ const NAV_ITEMS_BY_ROLE: Record<UserRole, NavItem[]> = {
 
 export function Navigation({
   currentUser,
-  onUserRoleChange,
 }: {
-  currentUser: User | null;
-  onUserRoleChange?: (role: UserRole) => void;
+  currentUser: User;
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { logout } = useAuth();
+  const [logoutError, setLogoutError] = React.useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
-  const role: UserRole = currentUser?.role || "doctor";
+  const role = currentUser.role;
   const navItems = NAV_ITEMS_BY_ROLE[role] || [];
 
-  const handleRoleSwitch = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newRole = e.target.value as UserRole;
-    await authService.switchUser(newRole);
-    if (onUserRoleChange) {
-      onUserRoleChange(newRole);
-    }
-    // Navigate to role landing page
-    if (newRole === "admin") router.push("/admin/users");
-    else if (newRole === "doctor") router.push("/doctor/dashboard");
-    else router.push("/patient/dashboard");
-  };
-
   const handleLogout = async () => {
-    await authService.logout();
-    router.push("/login");
+    setLogoutError("");
+    try {
+      await logout();
+      router.replace("/login");
+    } catch {
+      setLogoutError("Sign out failed. Check your connection and retry.");
+    }
   };
 
   return (
     <>
+      {logoutError && <p role="alert" className="fixed top-2 right-2 z-[60] rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{logoutError}</p>}
       {/* Mobile Top Bar */}
-      <header className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200 sticky top-0 z-40">
+      <header className="lg:hidden flex items-center justify-between px-4 py-2.5 bg-[#2E3A42] border-b border-slate-700/60 sticky top-0 z-40">
         <Link href="/" className="flex items-center gap-2 focus:outline-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/images/orthosense-logo.png"
             alt="OrthoSense Logo"
-            className="h-8 w-auto object-contain drop-shadow-[0_1px_2px_rgba(15,23,42,0.2)]"
+            className="h-7 w-auto object-contain drop-shadow-[0_1px_3px_rgba(0,0,0,0.4)]"
           />
         </Link>
         <div className="flex items-center gap-2">
-          <span className="text-xs uppercase font-mono px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200 font-semibold">
+          <span className="text-xs uppercase font-mono px-2 py-0.5 rounded bg-teal-500/20 text-teal-200 border border-teal-500/30 font-semibold">
             {role}
           </span>
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label="Toggle Navigation Menu"
-            className="p-2 rounded-lg text-slate-600 hover:bg-slate-100"
+            className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50"
           >
             {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
@@ -116,12 +109,14 @@ export function Navigation({
           <div className="bg-white rounded-t-2xl p-6 space-y-4 max-h-[85vh] overflow-y-auto">
             <div className="flex justify-between items-center pb-3 border-b border-slate-100">
               <Link href="/" onClick={() => setMobileMenuOpen(false)}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/images/orthosense-logo.png"
-                  alt="OrthoSense Logo"
-                  className="h-8 w-auto object-contain drop-shadow-[0_1px_2px_rgba(15,23,42,0.2)]"
-                />
+                <div className="bg-[#2E3A42] rounded-lg px-3 py-1.5 border border-slate-700/50">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/images/orthosense-logo.png"
+                    alt="OrthoSense Logo"
+                    className="h-7 w-auto object-contain"
+                  />
+                </div>
               </Link>
               <button
                 onClick={() => setMobileMenuOpen(false)}
@@ -152,20 +147,6 @@ export function Navigation({
               })}
             </div>
             <div className="pt-4 border-t border-slate-200 space-y-3">
-              <div>
-                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 block mb-1">
-                  Switch Role Persona (Dev Demo)
-                </label>
-                <select
-                  value={role}
-                  onChange={handleRoleSwitch}
-                  className="w-full text-sm border border-slate-300 rounded-lg p-2 bg-slate-50"
-                >
-                  <option value="doctor">Doctor (Dr. Marcus Vance)</option>
-                  <option value="patient">Patient (Sarah Connor)</option>
-                  <option value="admin">Administrator (Elena Rostova)</option>
-                </select>
-              </div>
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm text-red-600 bg-red-50 rounded-lg font-medium hover:bg-red-100"
@@ -181,14 +162,16 @@ export function Navigation({
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-slate-200 shrink-0 sticky top-0 h-screen select-none">
         {/* Brand Header */}
-        <div className="p-5 border-b border-slate-100">
+        <div className="p-4 border-b border-slate-100">
           <Link href="/" className="group block focus:outline-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/images/orthosense-logo.png"
-              alt="OrthoSense Logo"
-              className="h-13 w-auto object-contain drop-shadow-[0_1px_3px_rgba(15,23,42,0.2)] transition-transform duration-200 group-hover:scale-[1.02]"
-            />
+            <div className="bg-[#2E3A42] rounded-xl px-3.5 py-2.5 border border-slate-700/60 shadow-xs flex items-center justify-center transition-all duration-200 group-hover:border-teal-500/60 group-hover:shadow-md">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/images/orthosense-logo.png"
+                alt="OrthoSense Logo"
+                className="h-8.5 w-auto object-contain drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)] transition-transform duration-200 group-hover:scale-[1.02]"
+              />
+            </div>
           </Link>
         </div>
 
@@ -205,20 +188,7 @@ export function Navigation({
             </div>
           </div>
 
-          <div className="pt-2 border-t border-slate-200">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-              Active Role Gateway
-            </label>
-            <select
-              value={role}
-              onChange={handleRoleSwitch}
-              className="w-full text-xs font-medium border border-slate-300 rounded-md py-1.5 px-2 bg-white text-slate-800 focus:ring-1 focus:ring-[#0F766E] focus:outline-none"
-            >
-              <option value="doctor">Doctor / Clinician</option>
-              <option value="patient">Patient Workspace</option>
-              <option value="admin">System Administrator</option>
-            </select>
-          </div>
+          <p className="pt-2 border-t border-slate-200 text-xs font-semibold text-teal-700">{role === "doctor" ? "Doctor / Clinician" : role === "admin" ? "System Administrator" : "Patient"}</p>
         </div>
 
         {/* Navigation Items */}
@@ -253,15 +223,8 @@ export function Navigation({
           })}
         </nav>
 
-        {/* Design System Link & Footer */}
+        {/* Navigation Footer */}
         <div className="p-3 border-t border-slate-100 space-y-1">
-          <Link
-            href="/design-system"
-            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors"
-          >
-            <Sliders className="h-3.5 w-3.5" />
-            <span>Design System & Tokens (W0)</span>
-          </Link>
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"

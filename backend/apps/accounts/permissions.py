@@ -2,6 +2,22 @@ from rest_framework import permissions
 from .models import User, ClinicianAssignment
 
 
+class IsClinicalUser(permissions.BasePermission):
+    """Technical administrator and hardware identities do not grant clinical access."""
+
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated and
+                    request.user.role in (User.Role.CLINICIAN, User.Role.PATIENT))
+
+
+def can_access_patient(user, patient):
+    if user.role == User.Role.PATIENT:
+        return user.pk == patient.pk
+    return user.role == User.Role.CLINICIAN and ClinicianAssignment.objects.filter(
+        clinician=user, patient=patient, active=True,
+    ).exists()
+
+
 class IsAdministrator(permissions.BasePermission):
     """Allows access only to authenticated system administrators."""
     def has_permission(self, request, view):
@@ -41,9 +57,9 @@ class IsAssignedClinicianOrSelf(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
 
-        # System Admins can view/manage for technical administration
+        # Only user-directory metadata is available to technical admins.
         if request.user.role == User.Role.ADMIN:
-            return True
+            return isinstance(obj, User)
 
         # Resolve target patient user instance
         target_patient_user = None

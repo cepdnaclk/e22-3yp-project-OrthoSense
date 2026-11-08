@@ -7,84 +7,6 @@ from apps.exercises.models import ExerciseDefinition, PlanVersion, ExercisePresc
 from apps.telemetry.models import Session, TelemetryBatch
 
 
-@pytest.fixture
-def api_client():
-    return APIClient()
-
-
-@pytest.fixture
-def seed_environment(db):
-    # Admin
-    admin = User.objects.create_user(
-        email="test_admin@orthosense.health",
-        username="test_admin",
-        password="password123",
-        role=User.Role.ADMIN,
-        full_name="Admin User"
-    )
-
-    # Clinician A and B
-    doc_a = User.objects.create_user(
-        email="doc_a@orthosense.health",
-        username="doc_a",
-        password="password123",
-        role=User.Role.CLINICIAN,
-        full_name="Dr. Vance"
-    )
-    doc_b = User.objects.create_user(
-        email="doc_b@orthosense.health",
-        username="doc_b",
-        password="password123",
-        role=User.Role.CLINICIAN,
-        full_name="Dr. Stone"
-    )
-
-    # Patients A and B
-    pat_a = User.objects.create_user(
-        email="pat_a@orthosense.health",
-        username="pat_a",
-        password="password123",
-        role=User.Role.PATIENT,
-        full_name="Sarah Connor"
-    )
-    PatientProfile.objects.create(user=pat_a, diagnosis="Post-Op ACL")
-
-    pat_b = User.objects.create_user(
-        email="pat_b@orthosense.health",
-        username="pat_b",
-        password="password123",
-        role=User.Role.PATIENT,
-        full_name="David Kim"
-    )
-    PatientProfile.objects.create(user=pat_b, diagnosis="Meniscus Repair")
-
-    # Assignment: Doc A -> Patient A
-    ClinicianAssignment.objects.create(clinician=doc_a, patient=pat_a, active=True)
-    # Assignment: Doc B -> Patient B
-    ClinicianAssignment.objects.create(clinician=doc_b, patient=pat_b, active=True)
-
-    # Device for Patient A
-    device = Device.objects.create(
-        device_identifier="ESP32-S3-TEST-001",
-        mac_address="11:22:33:44:55:66",
-        status=Device.Status.ACTIVE,
-    )
-    token = "test_token_secret_123"
-    import hashlib
-    h = hashlib.sha256(token.encode("utf-8")).hexdigest()
-    DeviceCredential.objects.create(device=device, hashed_token=h, salt="salt")
-
-    return {
-        "admin": admin,
-        "doc_a": doc_a,
-        "doc_b": doc_b,
-        "pat_a": pat_a,
-        "pat_b": pat_b,
-        "device": device,
-        "device_token": token,
-    }
-
-
 def test_system_health(api_client, db):
     response = api_client.get("/api/v1/health/")
     assert response.status_code == 200
@@ -99,7 +21,8 @@ def test_auth_login_and_me(api_client, seed_environment):
         "password": "password123"
     })
     assert login_resp.status_code == 200
-    assert "token" in login_resp.data
+    assert "csrfToken" in login_resp.data
+    assert "token" not in login_resp.data
     assert login_resp.data["user"]["role"] == "PATIENT"
 
     # Test me endpoint
@@ -202,7 +125,7 @@ def test_telemetry_device_ingest_and_idempotency(api_client, seed_environment):
     pat_a = seed_environment["pat_a"]
     token = seed_environment["device_token"]
 
-    session = Session.objects.create(patient=pat_a, device=device)
+    session = Session.objects.create(patient=pat_a, device=device, status=Session.Status.IN_PROGRESS)
 
     payload = {
         "device_id": device.device_identifier,

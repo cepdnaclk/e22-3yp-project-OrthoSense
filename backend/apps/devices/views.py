@@ -7,7 +7,23 @@ from drf_spectacular.utils import extend_schema
 from .models import Device, TechnicalAlert
 from .serializers import DeviceSerializer, DeviceCreateSerializer, TechnicalAlertSerializer
 from apps.accounts.permissions import IsAdministrator
-from apps.accounts.models import AuditLogEntry
+from apps.accounts.models import AuditLogEntry, User, ClinicianAssignment
+
+
+def scoped_device_ids(user):
+    devices = Device.objects.all()
+    if not user or not user.is_authenticated:
+        return devices.none().values_list("pk", flat=True)
+    if user.role == User.Role.ADMIN:
+        return devices.values_list("pk", flat=True)
+    if user.role == User.Role.PATIENT:
+        devices = devices.filter(assignments__active=True, assignments__patient=user)
+    elif user.role == User.Role.CLINICIAN:
+        patient_ids = ClinicianAssignment.objects.filter(clinician=user, active=True).values_list("patient_id", flat=True)
+        devices = devices.filter(assignments__active=True, assignments__patient_id__in=patient_ids)
+    else:
+        devices = devices.none()
+    return devices.values_list("pk", flat=True)
 
 
 class DeviceViewSet(viewsets.ModelViewSet):
@@ -17,10 +33,24 @@ class DeviceViewSet(viewsets.ModelViewSet):
     queryset = Device.objects.all().prefetch_related("sensor_channels", "assignments__patient")
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_queryset(self):
+        return super().get_queryset().filter(pk__in=scoped_device_ids(self.request.user))
+
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy", "revoke"):
+            return [IsAdministrator()]
+        return super().get_permissions()
+
     def get_serializer_class(self):
         if self.action == "create":
             return DeviceCreateSerializer
         return DeviceSerializer
+
+    def destroy(self, request, *args, **kwargs):
+        device = self.get_object()
+        if device.recorded_sessions.exists() or device.emitted_batches.exists():
+            return Response({"detail": "A device with session history must be revoked, not deleted."}, status=status.HTTP_400_BAD_REQUEST)
+        return super().destroy(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
         # Only Admins can register/provision new devices
@@ -82,9 +112,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
     def ping(self, request, pk=None):
         """Diagnostic ping from web portal or hardware."""
         device = self.get_object()
-        device.last_seen_at = timezone.now()
-        device.save(update_fields=["last_seen_at"])
-        return Response({"status": "pong", "device_id": str(device.id), "timestamp": timezone.now().isoformat()})
+        return Response({"status": "server_reachable", "device_id": str(device.id), "last_seen_at": device.last_seen_at})
 
 
 class TechnicalAlertViewSet(viewsets.ReadOnlyModelViewSet):
@@ -94,4 +122,7 @@ class TechnicalAlertViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = TechnicalAlert.objects.all()
     serializer_class = TechnicalAlertSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return super().get_queryset().filter(device_id__in=scoped_device_ids(self.request.user))
 

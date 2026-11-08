@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit --incremental false",
+    "test:auth": "node --test tests/auth.test.mjs"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.3.4",

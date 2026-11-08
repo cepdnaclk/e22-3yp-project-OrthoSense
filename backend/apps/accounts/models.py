@@ -54,6 +54,9 @@ class User(AbstractUser):
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
 
+    class Meta:
+        ordering = ["-created_at"]
+
     def __str__(self):
         return f"{self.full_name or self.email} ({self.role})"
 

@@ -64,6 +64,11 @@ class DeviceCreateSerializer(serializers.ModelSerializer):
             "assigned_patient_id",
         ]
 
+    def validate_assigned_patient_id(self, value):
+        if value is not None and not User.objects.filter(pk=value, role=User.Role.PATIENT, is_active=True).exists():
+            raise serializers.ValidationError("An active patient is required.")
+        return value
+
     def create(self, validated_data):
         patient_id = validated_data.pop("assigned_patient_id", None)
         device = Device.objects.create(**validated_data)

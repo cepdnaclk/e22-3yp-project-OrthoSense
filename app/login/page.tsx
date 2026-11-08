@@ -4,46 +4,30 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { authService } from "@/lib/services/auth-service";
-import { UserRole } from "@/lib/types";
-import {
-  ShieldAlert,
-  Stethoscope,
-  UserCircle,
-  Activity,
-  CheckCircle2,
-  Lock,
-  ArrowRight,
-  Radio,
-  Cpu,
-} from "lucide-react";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { ROLE_HOME } from "@/lib/services/auth-contract";
+import { ApiError } from "@/lib/services/api-client";
+import { Radio } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login, user, status } = useAuth();
+  React.useEffect(() => {
+    if (status === "authenticated" && user) router.replace(ROLE_HOME[user.role]);
+  }, [user, status, router]);
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
 
-  const handleLogin = async (rolePreset?: UserRole) => {
+  const handleLogin = async () => {
     setLoading(true);
     setError("");
     try {
-      const selected =
-        rolePreset ||
-        (email.includes("admin")
-          ? "admin"
-          : email.includes("patient")
-          ? "patient"
-          : "doctor");
-
-      await authService.login(email || `${selected}@orthosense.health`, selected);
-
-      if (selected === "admin") router.push("/admin/users");
-      else if (selected === "patient") router.push("/patient/dashboard");
-      else router.push("/doctor/dashboard");
-    } catch {
-      setError("Invalid credentials or session expired.");
+      const user = await login(email.trim(), password);
+      router.replace(ROLE_HOME[user.role]);
+    } catch (error) {
+      setError(error instanceof ApiError ? error.message : "Unable to sign in. Check the backend connection and retry.");
     } finally {
       setLoading(false);
     }
@@ -80,7 +64,7 @@ export default function LoginPage() {
           </div>
 
           <span className="px-3 py-1 rounded-full text-[11px] font-semibold bg-white/20 backdrop-blur-md text-white border border-white/30 shadow-md">
-            v1.4.2 Production
+            Research Prototype
           </span>
         </div>
 
@@ -153,12 +137,14 @@ export default function LoginPage() {
 
           {/* Form Header */}
           <div className="space-y-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/images/orthosense-logo.png"
-              alt="OrthoSense Logo"
-              className="h-10 w-auto object-contain"
-            />
+            <div className="inline-block bg-[#2E3A42] rounded-xl px-3.5 py-2 border border-slate-700/50 shadow-xs">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/images/orthosense-logo.png"
+                alt="OrthoSense Logo"
+                className="h-8 w-auto object-contain"
+              />
+            </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900">
                 Sign in to your account
@@ -231,73 +217,9 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          {/* QUICK ROLE DEMO LOGINS */}
-          <div className="pt-5 border-t border-slate-200 space-y-3">
-            <div className="text-center">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                Quick Role Sandbox Switcher
-              </span>
-              <p className="text-[11px] text-slate-500">
-                Click any persona to log in instantly with test credentials
-              </p>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2.5">
-              <button
-                type="button"
-                onClick={() => handleLogin("doctor")}
-                className="p-3 border border-slate-200 hover:border-teal-500 rounded-xl bg-slate-50/70 hover:bg-teal-50/70 transition-all text-center flex flex-col items-center gap-1.5 group cursor-pointer"
-              >
-                <div className="h-8 w-8 rounded-lg bg-teal-100/80 text-[#0F766E] flex items-center justify-center group-hover:scale-105 transition-transform">
-                  <Stethoscope className="h-4 w-4" />
-                </div>
-                <div className="text-left">
-                  <span className="font-bold text-[11px] text-slate-800 block text-center">
-                    Doctor
-                  </span>
-                  <span className="text-[9px] text-slate-400 block text-center">
-                    Dr. Vance
-                  </span>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleLogin("patient")}
-                className="p-3 border border-slate-200 hover:border-blue-500 rounded-xl bg-slate-50/70 hover:bg-blue-50/70 transition-all text-center flex flex-col items-center gap-1.5 group cursor-pointer"
-              >
-                <div className="h-8 w-8 rounded-lg bg-blue-100/80 text-[#0284C7] flex items-center justify-center group-hover:scale-105 transition-transform">
-                  <UserCircle className="h-4 w-4" />
-                </div>
-                <div className="text-left">
-                  <span className="font-bold text-[11px] text-slate-800 block text-center">
-                    Patient
-                  </span>
-                  <span className="text-[9px] text-slate-400 block text-center">
-                    Sarah C.
-                  </span>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleLogin("admin")}
-                className="p-3 border border-slate-200 hover:border-slate-500 rounded-xl bg-slate-50/70 hover:bg-slate-100 transition-all text-center flex flex-col items-center gap-1.5 group cursor-pointer"
-              >
-                <div className="h-8 w-8 rounded-lg bg-slate-200 text-slate-700 flex items-center justify-center group-hover:scale-105 transition-transform">
-                  <ShieldAlert className="h-4 w-4" />
-                </div>
-                <div className="text-left">
-                  <span className="font-bold text-[11px] text-slate-800 block text-center">
-                    Admin
-                  </span>
-                  <span className="text-[9px] text-slate-400 block text-center">
-                    E. Rostova
-                  </span>
-                </div>
-              </button>
-            </div>
-          </div>
+          <p className="pt-5 border-t border-slate-200 text-xs text-slate-500 text-center">
+            Sign in with your assigned account. Your workspace is determined by your account permissions.
+          </p>
 
           {/* Legal Compliance Footer */}
           <div className="pt-2 text-center">

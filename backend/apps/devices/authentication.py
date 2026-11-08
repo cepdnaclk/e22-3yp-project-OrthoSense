@@ -53,14 +53,11 @@ class DeviceBearerAuthentication(authentication.BaseAuthentication):
         except DeviceCredential.DoesNotExist:
             raise exceptions.AuthenticationFailed("Invalid hardware device credentials.")
 
-        if credential.is_revoked:
+        if credential.is_revoked or credential.device.status == Device.Status.REVOKED:
             raise exceptions.AuthenticationFailed("Device credentials have been revoked by clinical administrator.")
 
         if credential.expires_at and credential.expires_at < timezone.now():
             raise exceptions.AuthenticationFailed("Device credentials have expired. Please re-pair device.")
-
-        # Update last seen timestamp
-        Device.objects.filter(id=credential.device_id).update(last_seen_at=timezone.now())
 
         hardware_user = AnonymousHardwareUser(credential.device)
         return (hardware_user, credential.device)

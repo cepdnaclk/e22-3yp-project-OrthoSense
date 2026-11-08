@@ -6,7 +6,8 @@ import { AppShell } from "@/components/ui/AppShell";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { INITIAL_DEVICES } from "@/lib/services/mock-data";
+import { devicesApi } from "@/lib/services/api";
+import { Device } from "@/lib/types";
 import {
   Cpu,
   ArrowLeft,
@@ -181,7 +182,36 @@ const SENSOR_CHANNELS: SensorCardData[] = [
 ];
 
 export default function PatientDevicePage() {
-  const device = INITIAL_DEVICES[0];
+  const [device, setDevice] = React.useState<Device>({
+    id: "dev_esp32_01",
+    macAddress: "C4:4F:33:0A:92:F1",
+    serialNumber: "ESP32-S3-ORTHO-092",
+    firmwareVersion: "v1.4.2-rtos",
+    status: "online",
+    batteryPercent: 94,
+    lastSeenAt: "Just now",
+    sensorHealth: {
+      imuThigh: "healthy",
+      imuShank: "healthy",
+      fsrFoot: "healthy",
+      tempSensor: "healthy",
+    },
+  });
+
+  React.useEffect(() => {
+    async function loadDevice() {
+      try {
+        const list = await devicesApi.getAll();
+        if (list && list.length > 0) {
+          setDevice(list[0]);
+        }
+      } catch {
+        // Fallback default
+      }
+    }
+    loadDevice();
+  }, []);
+
   const [testing, setTesting] = React.useState(false);
   const [testResult, setTestResult] = React.useState<string | null>(null);
   const [testingChannel, setTestingChannel] = React.useState<string | null>(null);

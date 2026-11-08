@@ -7,16 +7,19 @@ import { Table, LineChart, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
 export interface TelemetryChartProps {
-  data: TelemetryPoint[];
+  data?: TelemetryPoint[];
+  points?: TelemetryPoint[];
   title?: string;
   className?: string;
 }
 
 export function TelemetryChart({
-  data,
+  data: dataProp,
+  points: pointsProp,
   title = "Synchronized Multi-Sensor Telemetry",
   className,
 }: TelemetryChartProps) {
+  const data = dataProp || pointsProp || [];
   const [activeTab, setActiveTab] = React.useState<"chart" | "table">("chart");
   const [activeChannel, setActiveChannel] = React.useState<"all" | "angle" | "fsr" | "temp">("all");
   const [hoverIndex, setHoverIndex] = React.useState<number | null>(null);
