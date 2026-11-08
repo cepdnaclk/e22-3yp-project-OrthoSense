@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import Session, TelemetryBatch, ReviewNote
 from apps.devices.models import Device
 from apps.exercises.models import PlanVersion
+from apps.accounts.serializers import StrictWriteFieldsMixin
 
 
 class ReviewNoteSerializer(serializers.ModelSerializer):
@@ -47,21 +48,20 @@ class SessionSerializer(serializers.ModelSerializer):
             "doctor_review_notes",
             "review_notes",
         ]
+        read_only_fields = fields
 
 
-class SessionCreateSerializer(serializers.ModelSerializer):
+class SessionCreateSerializer(StrictWriteFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = Session
         fields = [
             "exercise_name",
-            "target_reps",
             "patient_reported_reps",
-            "sensor_estimated_reps",
-            "duration_seconds",
-            "max_flexion_deg",
-            "max_extension_deg",
             "status",
         ]
+
+    def to_representation(self, instance):
+        return SessionSerializer(instance, context=self.context).data
 
     def create(self, validated_data):
         patient = self.context["request"].user
@@ -83,6 +83,12 @@ class SessionCreateSerializer(serializers.ModelSerializer):
             **validated_data
         )
         return session
+
+
+class PatientSessionUpdateSerializer(StrictWriteFieldsMixin, serializers.ModelSerializer):
+    class Meta:
+        model = Session
+        fields = ["patient_reported_reps", "status"]
 
 
 class SessionReviewSerializer(serializers.Serializer):

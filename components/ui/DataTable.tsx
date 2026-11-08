@@ -13,7 +13,7 @@ export interface Column<T> {
 export interface DataTableProps<T> {
   data: T[];
   columns: Column<T>[];
-  keyExtractor: (item: T) => string;
+  keyExtractor?: (item: T, idx?: number) => string;
   emptyMessage?: string;
   className?: string;
   onRowClick?: (item: T) => void;
@@ -27,6 +27,7 @@ export function DataTable<T extends Record<string, any>>({
   className,
   onRowClick,
 }: DataTableProps<T>) {
+  const getKey = keyExtractor || ((item: any, idx?: number) => item.id || item.key || item.uuid || (idx !== undefined ? `row_${idx}` : String(Math.random())));
   const [sortKey, setSortKey] = React.useState<string | null>(null);
   const [sortOrder, setSortOrder] = React.useState<"asc" | "desc">("asc");
 
@@ -107,9 +108,9 @@ export function DataTable<T extends Record<string, any>>({
               </td>
             </tr>
           ) : (
-            sortedData.map((item) => (
+            sortedData.map((item, index) => (
               <tr
-                key={keyExtractor(item)}
+                key={getKey(item, index)}
                 onClick={() => onRowClick?.(item)}
                 className={cn(
                   "hover:bg-slate-50/75 transition-colors",

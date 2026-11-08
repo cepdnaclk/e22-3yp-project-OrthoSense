@@ -85,7 +85,7 @@ export default function AdminDevicesPage() {
       sortable: true,
       render: (d) => (
         <StatusBadge
-          status={d.status === "active" || d.status === "online" ? "healthy" : "degraded"}
+          status={d.status === "online" ? "healthy" : "degraded"}
           labelOverride={d.status.toUpperCase()}
           size="sm"
         />

@@ -16,7 +16,6 @@ export interface User {
 
 export interface AuthSession {
   user: User;
-  token: string;
   expiresAt: string;
 }
 
@@ -30,7 +29,7 @@ export type SensorHealthStatus =
 
 export type ChannelHealth = "READ_OK" | "STALE" | "NO_RESPONSE" | "RAIL_ERROR";
 
-export type DeviceStatus = "online" | "offline" | "unpaired" | "maintenance";
+export type DeviceStatus = "online" | "offline" | "unpaired" | "maintenance" | "unknown" | "revoked";
 
 export interface Device {
   id: string;
@@ -38,10 +37,11 @@ export interface Device {
   serialNumber: string;
   firmwareVersion: string;
   status: DeviceStatus;
-  batteryPercent: number;
+  batteryPercent: number | null;
+  enrollmentStatus?: "ACTIVE" | "REVOKED" | "MAINTENANCE" | "UNPAIRED";
   assignedPatientId?: string;
   assignedPatientName?: string;
-  lastSeenAt: string;
+  lastSeenAt: string | null;
   token?: string;
   sensorHealth: {
     imuThigh: SensorHealthStatus;
@@ -107,8 +107,8 @@ export interface ExerciseSession {
   id: string;
   patientId: string;
   patientName: string;
-  planId: string;
-  planVersion: number;
+  planId: string | null;
+  planVersion: number | null;
   exerciseName: string;
   startedAt: string;
   endedAt?: string;
@@ -131,7 +131,7 @@ export interface AuditLogEntry {
   timestamp: string;
   actorId: string;
   actorName: string;
-  actorRole: UserRole;
+  actorRole: UserRole | "system";
   action: string;
   details: string;
   severity: "info" | "warning" | "critical";

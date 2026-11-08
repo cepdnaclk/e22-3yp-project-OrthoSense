@@ -3,7 +3,8 @@ import { cn } from "@/lib/utils/cn";
 import { X } from "lucide-react";
 
 export interface DialogProps {
-  open: boolean;
+  open?: boolean;
+  isOpen?: boolean;
   onClose: () => void;
   title: string;
   description?: string;
@@ -13,22 +14,24 @@ export interface DialogProps {
 
 export function Dialog({
   open,
+  isOpen,
   onClose,
   title,
   description,
   children,
   className,
 }: DialogProps) {
+  const isShown = open ?? isOpen ?? false;
   const dialogRef = React.useRef<HTMLDivElement>(null);
 
   // Escape key handler
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && open) {
+      if (e.key === "Escape" && isShown) {
         onClose();
       }
     };
-    if (open) {
+    if (isShown) {
       document.addEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "hidden";
     }
@@ -36,11 +39,11 @@ export function Dialog({
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "";
     };
-  }, [open, onClose]);
+  }, [isShown, onClose]);
 
   // Focus trapping
   React.useEffect(() => {
-    if (open && dialogRef.current) {
+    if (isShown && dialogRef.current) {
       const focusableElements = dialogRef.current.querySelectorAll<HTMLElement>(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
       );
@@ -48,9 +51,9 @@ export function Dialog({
         focusableElements[0].focus();
       }
     }
-  }, [open]);
+  }, [isShown]);
 
-  if (!open) return null;
+  if (!isShown) return null;
 
   return (
     <div
