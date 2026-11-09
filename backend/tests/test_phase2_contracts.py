@@ -1,3 +1,5 @@
+import uuid
+from apps.exercises.models import ExerciseDefinition, ExercisePrescription
 from apps.exercises.models import PlanVersion
 from apps.telemetry.models import Session
 
@@ -10,10 +12,14 @@ def test_create_responses_include_canonical_identity(api_client, seed_environmen
     assert response.data["id"] and response.data["version_number"] == 1
     assert response.data["clinical_notes"] == "Contract test"
     assert response.data["prescriptions"] == []
+    plan=PlanVersion.objects.get(pk=response.data["id"])
+    exercise=ExerciseDefinition.objects.create(code="contract",name="Contract exercise",description="test")
+    item=ExercisePrescription.objects.create(plan_version=plan,exercise=exercise)
+    plan.publish()
     api_client.force_authenticate(user=env["pat_a"])
-    response = api_client.post("/api/v1/sessions/", {"exercise_name": "Contract exercise", "patient_reported_reps": 3}, format="json")
+    response = api_client.post("/api/v1/sessions/", {"prescription_id": str(item.pk), "session_id": str(uuid.uuid4())}, format="json")
     assert response.status_code == 201
-    assert response.data["id"] and response.data["patient_reported_reps"] == 3
+    assert response.data["id"] and response.data["patient_reported_reps"] is None
     assert response.data["patient_id"] == str(env["pat_a"].pk)
     assert Session.objects.get(pk=response.data["id"]).exercise_name == "Contract exercise"
 

@@ -1,4 +1,4 @@
-import type { PatientDto, ExerciseDto, PrescriptionInput, PlanDto, SessionDto, DeviceDto, AuditDto, AlertDto, HealthDto } from "./api-contract";
+import type { ClinicalFilters, ClinicalSummary, PatientDto, ExerciseDto, PrescriptionInput, PlanDto, SessionDto, DeviceDto, AuditDto, AlertDto, HealthDto } from "./api-contract";
 import { apiClient, setCsrfToken } from "./api-client";
 import type { ApiAuthSession, ApiUser } from "./auth-contract";
 import { normalizeRole } from "./auth-contract";
@@ -101,6 +101,7 @@ export const plansApi = {
     const p = await apiClient.get<PlanDto>(endpoint);
     return {
       id: p.id,
+      schedule: p.schedule ?? [],
       patientId: p.patient,
       patientName: p.patient_name,
       doctorId: p.authored_by,
@@ -128,6 +129,7 @@ export const plansApi = {
     const list = await allPages<PlanDto>(patientId ? `/plans/?patient_id=${encodeURIComponent(patientId)}` : "/plans/");
     return list.map((p) => ({
       id: p.id,
+      schedule: p.schedule ?? [],
       patientId: p.patient,
       patientName: p.patient_name,
       doctorId: p.authored_by,
@@ -151,11 +153,11 @@ export const plansApi = {
     }));
   },
 
-  create: async (data: { patient: string; clinical_notes?: string; items?: PrescriptionInput[] }): Promise<PlanDto> => {
+  create: async (data: { patient: string; clinical_notes?: string; items?: PrescriptionInput[]; schedule?: import("@/lib/types").ExerciseReminder[] }): Promise<PlanDto> => {
     return apiClient.post("/plans/", data);
   },
 
-  update: (id: string, data: { clinical_notes: string; items: PrescriptionInput[] }): Promise<PlanDto> => apiClient.patch(`/plans/${id}/`, data),
+  update: (id: string, data: { clinical_notes: string; items: PrescriptionInput[]; schedule?: import("@/lib/types").ExerciseReminder[] }): Promise<PlanDto> => apiClient.patch(`/plans/${id}/`, data),
 
   publish: async (id: string): Promise<PlanDto> => {
     return apiClient.post(`/plans/${id}/publish/`);
@@ -187,73 +189,39 @@ export const exercisesApi = {
 // ==========================================
 // 5. SESSIONS & TELEMETRY API
 // ==========================================
+function clinicalQuery(filters: ClinicalFilters): string {
+  const query=new URLSearchParams();
+  for(const [key,value] of Object.entries(filters)) if(value !== undefined && value !== "") query.set(key,String(value));
+  return query.toString();
+}
+function mapSession(s: SessionDto): ExerciseSession {
+  return {id:s.id, patientId:s.patient_id, patientName:s.patient_name, planId:s.plan_version,
+    planVersion:s.plan_version_number ?? null, exerciseName:s.exercise_name, startedAt:s.started_at,
+    endedAt:s.ended_at ?? undefined, durationSeconds:s.duration_seconds, targetReps:s.target_reps,
+    patientReportedReps:s.patient_reported_reps, sensorEstimatedReps:s.sensor_estimated_reps,
+    maxFlexionDeg:s.max_flexion_deg, maxExtensionDeg:s.max_extension_deg, status:s.status,
+    qualityFlag:s.quality_flag, doctorReviewed:s.doctor_reviewed, doctorReviewedAt:s.doctor_reviewed_at ?? undefined,
+    reviewNotes:s.doctor_review_notes, prescribedItem:s.prescribed_item, planAuthorName:s.plan_author_name,
+    reviewHistory:s.review_notes};
+}
 export const sessionsApi = {
-  getAll: async (): Promise<ExerciseSession[]> => {
-    const list = await allPages<SessionDto>("/sessions/");
-    return list.map((s) => ({
-      id: s.id,
-      patientId: s.patient_id,
-      patientName: s.patient_name,
-      planId: s.plan_version,
-      planVersion: s.plan_version_number ?? null,
-      exerciseName: s.exercise_name,
-      startedAt: s.started_at,
-      endedAt: s.ended_at ?? undefined,
-      durationSeconds: s.duration_seconds,
-      targetReps: s.target_reps,
-      patientReportedReps: s.patient_reported_reps,
-      sensorEstimatedReps: s.sensor_estimated_reps,
-      maxFlexionDeg: s.max_flexion_deg,
-      maxExtensionDeg: s.max_extension_deg,
-      status: s.status,
-      qualityFlag: s.quality_flag,
-      doctorReviewed: s.doctor_reviewed,
-      doctorReviewedAt: s.doctor_reviewed_at ?? undefined,
-      reviewNotes: s.doctor_review_notes,
-    }));
+  getAll: async (filters: ClinicalFilters = {}): Promise<ExerciseSession[]> => (await allPages<SessionDto>(`/sessions/?${clinicalQuery(filters)}`)).map(mapSession),
+  listPage: async (filters: ClinicalFilters = {}): Promise<PaginatedResponse<ExerciseSession>> => {
+    const page=await apiClient.get<PaginatedResponse<SessionDto>>(`/sessions/?${clinicalQuery(filters)}`);
+    return {...page,results:page.results.map(mapSession)};
   },
-
-  getById: async (id: string): Promise<ExerciseSession> => {
-    const s = await apiClient.get<SessionDto>(`/sessions/${id}/`);
-    return {
-      id: s.id,
-      patientId: s.patient_id,
-      patientName: s.patient_name,
-      planId: s.plan_version,
-      planVersion: s.plan_version_number ?? null,
-      exerciseName: s.exercise_name,
-      startedAt: s.started_at,
-      endedAt: s.ended_at ?? undefined,
-      durationSeconds: s.duration_seconds,
-      targetReps: s.target_reps,
-      patientReportedReps: s.patient_reported_reps,
-      sensorEstimatedReps: s.sensor_estimated_reps,
-      maxFlexionDeg: s.max_flexion_deg,
-      maxExtensionDeg: s.max_extension_deg,
-      status: s.status,
-      qualityFlag: s.quality_flag,
-      doctorReviewed: s.doctor_reviewed,
-      doctorReviewedAt: s.doctor_reviewed_at ?? undefined,
-      reviewNotes: s.doctor_review_notes,
-    };
-  },
-
-  review: async (id: string, notes: string): Promise<SessionDto> => {
-    return apiClient.post(`/sessions/${id}/review/`, { notes });
-  },
+  summary: (filters: ClinicalFilters = {}): Promise<ClinicalSummary> => apiClient.get(`/sessions/summary/?${clinicalQuery(filters)}`),
+  getById: async (id: string): Promise<ExerciseSession> => mapSession(await apiClient.get<SessionDto>(`/sessions/${id}/`)),
+  review: async (id: string, notes: string, expectedReviewId?: string, revision = false): Promise<ExerciseSession> => mapSession(await apiClient.post<SessionDto>(`/sessions/${id}/review/`, {notes, replace_review:revision || !!expectedReviewId, expected_review_id:expectedReviewId})),
 
   getTelemetry: async (id: string, maxPoints = 500): Promise<TelemetryPoint[]> => {
     return apiClient.get<TelemetryPoint[]>(`/sessions/${id}/telemetry/?max_points=${maxPoints}`);
   },
 
-  create: async (data: Partial<ExerciseSession>): Promise<ExerciseSession> => {
-    const saved = await apiClient.post<{ id: string }>("/sessions/", {
-      exercise_name: data.exerciseName,
-      patient_reported_reps: data.patientReportedReps,
-      status: data.status,
-    });
-    return sessionsApi.getById(saved.id);
-  },
+  start: (prescriptionId: string, sessionId: string): Promise<SessionDto> => apiClient.post("/sessions/", {prescription_id: prescriptionId, session_id: sessionId}),
+  current: (id: string): Promise<SessionDto> => apiClient.get(`/sessions/${id}/`),
+  transition: (id: string, operation: "pause" | "resume" | "finish" | "abandon", reps?: number): Promise<SessionDto> => apiClient.post(`/sessions/${id}/transition/`, {operation, ...(reps === undefined ? {} : {patient_reported_reps: reps})}),
+
 };
 
 // ==========================================
@@ -275,7 +243,7 @@ export const devicesApi = {
       macAddress: d.mac_address,
       serialNumber: d.device_identifier,
       firmwareVersion: d.firmware_version,
-      status: d.status === "ACTIVE" ? "unknown" : d.status === "REVOKED" ? "revoked" : d.status === "MAINTENANCE" ? "maintenance" : "unpaired",
+      status: d.connectivity ?? (d.status === "ACTIVE" ? "unknown" : d.status === "REVOKED" ? "revoked" : d.status === "MAINTENANCE" ? "maintenance" : "unpaired"),
       enrollmentStatus: d.status,
       batteryPercent: d.battery_percent,
       assignedPatientId: d.assigned_patient?.id,
@@ -293,6 +261,9 @@ export const devicesApi = {
   create: async (data: { device_identifier: string; mac_address: string; hardware_revision?: string; firmware_version?: string; assigned_patient_id?: string }): Promise<DeviceDto & { hardwareBearerToken: string }> => {
     return apiClient.post("/devices/", data);
   },
+
+  assign: (id: string, patientId: string | null): Promise<DeviceDto> => apiClient.post(`/devices/${id}/assign/`, {patient_id:patientId}),
+  rotate: (id: string): Promise<{hardwareBearerToken:string}> => apiClient.post(`/devices/${id}/rotate/`),
 
   revoke: async (id: string): Promise<{ status: string }> => {
     return apiClient.post(`/devices/${id}/revoke/`);

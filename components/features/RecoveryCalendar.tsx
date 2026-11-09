@@ -1,0 +1,27 @@
+"use client";
+import * as React from "react";
+import Link from "next/link";
+import { ChevronLeft,ChevronRight,CheckCircle2 } from "lucide-react";
+import type { ExerciseSession, ExercisePlan } from "@/lib/types";
+const dayKey=(date:Date) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+export function RecoveryCalendar({sessions,asOf,plan}:{sessions:ExerciseSession[];asOf:number;plan:ExercisePlan | null}) {
+  const [month,setMonth]=React.useState(() => {const date=new Date(asOf);return new Date(date.getFullYear(),date.getMonth(),1);});
+  const [selected,setSelected]=React.useState(() => dayKey(new Date(asOf)));
+  const completed=sessions.filter(item => item.status === "completed");
+  const byDay=new Map<string,ExerciseSession[]>();
+  completed.forEach(item => {const key=dayKey(new Date(item.endedAt || item.startedAt));byDay.set(key,[...(byDay.get(key) ?? []),item]);});
+  const count=new Date(month.getFullYear(),month.getMonth()+1,0).getDate();
+  const offset=(month.getDay()+6)%7;
+  const chosen=byDay.get(selected) ?? [];
+  const reminders=plan?.schedule ?? [];
+  const scheduled=reminders.filter(item => dayKey(new Date(item.scheduled_at))===selected);
+  const today=dayKey(new Date(asOf));
+  return <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7" aria-labelledby="calendar-title">
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-4"><div><h2 id="calendar-title" className="text-xl font-semibold">Your exercise calendar</h2><p className="mt-1 text-sm text-slate-500">Your completed sessions and doctor-scheduled exercise reminders.</p></div><div className="flex items-center gap-3"><button className="rounded-lg border p-2 hover:bg-slate-50" aria-label="Previous month" onClick={() => setMonth(new Date(month.getFullYear(),month.getMonth()-1,1))}><ChevronLeft className="h-4 w-4" /></button><p aria-live="polite" className="min-w-36 text-center text-sm font-semibold">{month.toLocaleDateString(undefined,{month:"long",year:"numeric"})}</p><button className="rounded-lg border p-2 hover:bg-slate-50" aria-label="Next month" onClick={() => setMonth(new Date(month.getFullYear(),month.getMonth()+1,1))}><ChevronRight className="h-4 w-4" /></button></div></div>
+    <div className="grid gap-6 md:grid-cols-[1.3fr_1fr]"><div><div className="mb-2 grid grid-cols-7 text-center text-xs font-medium text-slate-500">{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(day => <span key={day}>{day}</span>)}</div><div className="grid grid-cols-7 gap-1 sm:gap-2">{Array.from({length:offset},(_,index) => <span key={`empty-${index}`} />)}{Array.from({length:count},(_,index) => {
+      const date=new Date(month.getFullYear(),month.getMonth(),index+1);const key=dayKey(date);const rows=byDay.get(key) ?? [];const planned=reminders.some(item => dayKey(new Date(item.scheduled_at))===key);const active=key===selected;
+      return <button key={key} onClick={() => setSelected(key)} aria-pressed={active} aria-current={key===today ? "date" : undefined} aria-label={`${date.toLocaleDateString()}: ${rows.length} completed sessions${planned ? ", prescribed reminder" : ""}`} className={`flex min-h-12 flex-col items-center justify-center rounded-xl border text-sm transition ${active ? "border-teal-800 bg-teal-800 text-white" : rows.length ? "border-teal-100 bg-teal-50 text-teal-900" : "border-transparent hover:border-slate-200 hover:bg-slate-50"}`}><span className={key===today ? "font-bold underline underline-offset-4" : ""}>{index+1}</span>{planned && <span className="mt-1 h-1.5 w-1.5 rounded-full bg-amber-400" />}{rows.length>0 && <span className={`mt-1 h-1.5 w-1.5 rounded-full ${active ? "bg-white" : "bg-teal-600"}`} />}</button>;
+    })}</div><p className="mt-4 flex items-center gap-2 text-xs text-slate-500"><span className="h-2 w-2 rounded-full bg-teal-600" />Completed exercise session <span className="ml-3 h-2 w-2 rounded-full bg-amber-400" />Doctor reminder</p></div>
+    <div className="rounded-2xl bg-slate-50 p-5"><h3 className="font-semibold">{new Date(`${selected}T12:00:00`).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"})}</h3>{chosen.length ? <ul className="mt-4 space-y-4">{chosen.map(item => <li key={item.id} className="flex gap-3"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-teal-700" /><div><p className="text-sm font-semibold">{item.exerciseName}</p><p className="mt-1 text-xs text-slate-500">Completed ? {item.patientReportedReps} reported repetitions</p></div></li>)}</ul> : <p className="mt-4 text-sm text-slate-500">No completed sessions recorded for this day.</p>}<div className="mt-5 border-t border-slate-200 pt-4"><h4 className="text-sm font-semibold">Doctor&apos;s exercise reminders</h4>{scheduled.length ? scheduled.map((entry,index) => <p key={index} className="mt-3 rounded-lg border border-amber-100 bg-amber-50 p-3 text-sm">{new Date(entry.scheduled_at).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"})} ? {plan?.items.find(item => item.exerciseId===entry.exercise_id)?.exerciseName || "Prescribed exercise"}</p>) : <p className="mt-2 text-sm text-slate-500">No prescribed reminder on this day.</p>}<p className="mt-3 text-xs text-slate-500">Reminders are shown in your browser&apos;s local time. A reminder alone does not confirm completion.</p></div><Link href="/patient/sessions" className="mt-5 inline-block text-sm font-semibold text-teal-800 underline">View session history</Link></div></div>
+  </section>;
+}

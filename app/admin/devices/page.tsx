@@ -9,11 +9,12 @@ import { Dialog } from "@/components/ui/Dialog";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { DataTable, Column } from "@/components/ui/DataTable";
 import { SkeletonTable } from "@/components/ui/Skeleton";
-import { devicesApi } from "@/lib/services/api";
-import { Device } from "@/lib/types";
+import { devicesApi, patientsApi } from "@/lib/services/api";
+import { Device, User } from "@/lib/types";
 import { Cpu, Plus, Key, Trash2, CheckCircle2, ShieldAlert, RefreshCw } from "lucide-react";
 
 export default function AdminDevicesPage() {
+  const [patients,setPatients] = React.useState<User[]>([]);
   const [devices, setDevices] = React.useState<Device[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [provisionOpen, setProvisionOpen] = React.useState(false);
@@ -26,16 +27,10 @@ export default function AdminDevicesPage() {
   const [generatedToken, setGeneratedToken] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
 
-  const fetchDevices = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await devicesApi.getAll();
-      setDevices(data);
-    } catch {
-      // Keep empty if error
-    } finally {
-      setLoading(false);
-    }
+  const fetchDevices = React.useCallback(() => {
+    return Promise.all([devicesApi.getAll(),patientsApi.getAll()]).then(([data,patientList]) => {
+      setDevices(data);setPatients(patientList);
+    }).catch(() => {setDevices([]);}).finally(() => setLoading(false));
   }, []);
 
   React.useEffect(() => {
@@ -56,8 +51,8 @@ export default function AdminDevicesPage() {
         setGeneratedToken(resp.hardwareBearerToken);
       }
       fetchDevices();
-    } catch (err: any) {
-      alert(err.message || "Failed to provision device");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to provision device");
     } finally {
       setSubmitting(false);
     }
@@ -70,8 +65,8 @@ export default function AdminDevicesPage() {
       setRevokeOpen(false);
       setSelectedDevice(null);
       fetchDevices();
-    } catch (err: any) {
-      alert(err.message || "Failed to revoke device");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to revoke device");
     }
   };
 
@@ -104,13 +99,21 @@ export default function AdminDevicesPage() {
     {
       key: "assignedPatientName",
       header: "Assigned Patient",
-      render: (d) => d.assignedPatientName || <span className="text-slate-400 italic">Unassigned</span>,
+      render: (d) => <div className="space-y-2"><p>{d.assignedPatientName || "Unassigned"}</p><select aria-label={`Assign patient for ${d.serialNumber}`} value={d.assignedPatientId || ""} onChange={async event => {
+        const id=event.target.value;
+        if(!confirm(id ? "Assign this device to the selected patient?" : "Unassign this device?")) return;
+        try {await devicesApi.assign(d.id,id || null);await fetchDevices();} catch(error) {alert(error instanceof Error ? error.message : "Assignment failed");}
+      }}><option value="">Unassigned</option>{patients.map(p => <option key={p.id} value={p.id} disabled={!!d.assignedPatientId && d.assignedPatientId!==p.id}>{p.fullName}</option>)}</select></div>,
     },
     {
       key: "id",
       header: "Actions",
       render: (d) => (
         <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={async () => {
+            if(!confirm("Rotate credentials? The old hardware token will immediately stop working.")) return;
+            try {const response=await devicesApi.rotate(d.id);setGeneratedToken(response.hardwareBearerToken);setProvisionOpen(true);await fetchDevices();} catch(error) {alert(error instanceof Error ? error.message : "Rotation failed");}
+          }}>Rotate token</Button>
           <Button
             size="sm"
             variant="ghost"

@@ -1,13 +1,14 @@
-import math
-from django.db import transaction, IntegrityError
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import viewsets, permissions, status, views, mixins
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, OpenApiTypes
 
 from .models import Session, TelemetryBatch, ReviewNote
 from .serializers import (
+    SessionFilterSerializer,
+    SessionTransitionSerializer,
     SessionSerializer,
     SessionCreateSerializer,
     SessionReviewSerializer,
@@ -18,7 +19,6 @@ from apps.devices.models import Device
 from apps.accounts.permissions import IsClinician, IsPatient, IsClinicalUser, IsAssignedClinicianOrSelf
 from apps.accounts.mixins import ScopedPatientQuerySetMixin
 from apps.accounts.models import AuditLogEntry
-from apps.analytics.services.downsampler import downsample_lttb
 from apps.devices.authentication import DeviceBearerAuthentication
 
 
@@ -26,59 +26,84 @@ class SessionViewSet(ScopedPatientQuerySetMixin, mixins.CreateModelMixin, mixins
     """
     Rehabilitation exercise session management and clinician review sign-offs.
     """
-    queryset = Session.objects.all().select_related("patient", "plan_version", "device").prefetch_related("review_notes__clinician")
+    queryset = Session.objects.all().select_related("patient", "plan_version__authored_by", "device", "prescription__exercise").prefetch_related("review_notes__clinician")
     patient_field_lookup = "patient"
     permission_classes = [IsClinicalUser, IsAssignedClinicianOrSelf]
 
     def get_permissions(self):
-        if self.action in ("create", "update", "partial_update"):
+        if self.action in ("create", "update", "partial_update", "transition"):
             return [IsPatient(), IsAssignedClinicianOrSelf()]
         if self.action == "review":
             return [IsClinician(), IsAssignedClinicianOrSelf()]
         return super().get_permissions()
 
+    def get_queryset(self):
+        query = SessionFilterSerializer(data=self.request.query_params)
+        query.is_valid(raise_exception=True)
+        filters = query.validated_data
+        qs = super().get_queryset()
+        from datetime import datetime, time, timedelta, timezone as dt_timezone
+        if "date_from" in filters:
+            qs = qs.filter(started_at__gte=datetime.combine(filters["date_from"], time.min, tzinfo=dt_timezone.utc))
+        if "date_to" in filters:
+            qs = qs.filter(started_at__lte=datetime.combine(filters["date_to"], time.max, tzinfo=dt_timezone.utc))
+        if "reviewed" in self.request.query_params:
+            qs = qs.filter(doctor_reviewed=filters["reviewed"])
+        return qs.order_by(filters["ordering"], "id")
+
+    @extend_schema(parameters=[SessionFilterSerializer], responses={200: OpenApiTypes.OBJECT}, description="Scoped UTC session totals and patient/exercise daily mean maximum-flexion trends. Defaults to the latest 30 UTC dates.")
+    @action(detail=False, methods=["get"])
+    def summary(self, request):
+        from .reporting import clinical_summary
+        return Response(clinical_summary(self.get_queryset(), request.user, request.query_params))
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        # Serialize retries of the same client-generated session UUID.
+        from apps.accounts.models import User
+        User.objects.select_for_update().get(pk=self.request.user.pk)
+        serializer.save()
+
     def get_serializer_class(self):
         if self.action == "create":
             return SessionCreateSerializer
+        if self.action == "transition":
+            return SessionTransitionSerializer
         if self.action in ("update", "partial_update"):
             return PatientSessionUpdateSerializer
         return SessionSerializer
 
+    @extend_schema(request=SessionReviewSerializer, responses={200: SessionSerializer})
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated, IsClinician])
     def review(self, request, pk=None):
         """
         POST /api/v1/sessions/{id}/review/
         Allows supervising clinician to approve session, submit clinical feedback, and update review stamp.
         """
-        session = self.get_object()
         serializer = SessionReviewSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        notes = serializer.validated_data["notes"]
-
-        session.doctor_reviewed = True
-        session.doctor_reviewed_at = timezone.now()
-        session.doctor_review_notes = notes
-        session.save()
-
-        ReviewNote.objects.create(
-            session=session,
-            clinician=request.user,
-            content=notes,
-        )
-
-        AuditLogEntry.objects.create(
-            actor=request.user,
-            actor_name=request.user.full_name,
-            actor_role=request.user.role,
-            action="SESSION_REVIEWED",
-            target_type="session",
-            target_id=str(session.id),
-            details=f"Dr. {request.user.full_name} reviewed session {session.id} for {session.patient.full_name}.",
-            severity="info",
-            ip_address=request.META.get("REMOTE_ADDR"),
-        )
-
-        return Response(SessionSerializer(session).data, status=status.HTTP_200_OK)
+        data = serializer.validated_data
+        with transaction.atomic():
+            scoped = self.get_object()
+            session = Session.objects.select_for_update().get(pk=scoped.pk)
+            if session.status != Session.Status.COMPLETED:
+                return Response({"detail": "Only completed sessions can be reviewed."}, status=409)
+            latest = session.review_notes.order_by("-reviewed_at", "-id").first()
+            if latest and latest.content == data["notes"] and latest.clinician_id == request.user.pk:
+                return Response(SessionSerializer(self.get_queryset().get(pk=session.pk)).data)
+            if latest or session.doctor_reviewed:
+                if not data["replace_review"] or str(data.get("expected_review_id")) != str(latest.pk if latest else None):
+                    return Response({"detail": "Review changed. Reload and explicitly save a revision."}, status=409)
+            note = ReviewNote.objects.create(session=session, clinician=request.user, content=data["notes"])
+            session.doctor_reviewed = True
+            session.doctor_reviewed_at = note.reviewed_at
+            session.doctor_review_notes = note.content
+            session.save(update_fields=["doctor_reviewed", "doctor_reviewed_at", "doctor_review_notes"])
+            AuditLogEntry.objects.create(actor=request.user, actor_name=request.user.full_name,
+                actor_role=request.user.role, action="SESSION_REVIEWED", target_type="session",
+                target_id=str(session.pk), details="Saved clinician review " + str(note.pk),
+                severity="info", ip_address=request.META.get("REMOTE_ADDR"))
+            return Response(SessionSerializer(self.get_queryset().get(pk=session.pk)).data)
 
     @action(detail=True, methods=["get"])
     def telemetry(self, request, pk=None):
@@ -87,68 +112,50 @@ class SessionViewSet(ScopedPatientQuerySetMixin, mixins.CreateModelMixin, mixins
         Returns downsampled time-series trajectory points (knee angle, FSR ground load, skin temp).
         """
         session = self.get_object()
-        max_points = int(request.query_params.get("max_points", 500))
+        try:
+            max_points = int(request.query_params.get("max_points", 500))
+            if not 3 <= max_points <= 5000:
+                raise ValueError()
+        except (ValueError, TypeError):
+            return Response({"max_points": "Must be an integer between 3 and 5000."}, status=400)
+        from .services import telemetry_points
+        from .reporting import downsample_envelope
+        return Response(downsample_envelope(telemetry_points(session), max_points))
 
-        # Query raw batches
-        batches = TelemetryBatch.objects.filter(session=session).order_by("sequence_number")
-        points = []
-
-        if batches.exists():
-            for b in batches:
-                samples = b.raw_payload.get("samples", [])
-                base_time = b.elapsed_ms
-                for s in samples:
-                    offset = s.get("offset_ms", 0)
-                    knee_angle = s.get("knee_angle_deg")
-                    if knee_angle is None and "imu2" in s:
-                        # Fallback derived from shank pitch
-                        knee_angle = s.get("imu2", {}).get("accel", [0, 0, 0])[0] * 10.0 + 90.0
-
-                    fsr_vals = s.get("fsr", [1420, 1510, 890])
-                    temp_vals = s.get("temp_c", [32.8])
-
-                    points.append({
-                        "timestampMs": base_time + offset,
-                        "kneeAngleDeg": round(knee_angle, 1) if knee_angle is not None else 90.0,
-                        "fsrHeelRaw": fsr_vals[0] if len(fsr_vals) > 0 else 1420,
-                        "fsrToeRaw": fsr_vals[1] if len(fsr_vals) > 1 else 1510,
-                        "skinTemperatureC": temp_vals[0] if len(temp_vals) > 0 else 32.8,
-                        "channelHealth": {
-                            "angle": "READ_OK",
-                            "fsr": "READ_OK",
-                            "temp": "READ_OK",
-                        }
-                    })
-        else:
-            # Generate deterministic synthetic telemetry wave for demo sessions
-            # Trapezoid knee flexion curve matching clinical protocol
-            total_points = 240
-            for i in range(total_points):
-                t_sec = i * 0.5
-                # Periodic flexion wave between 5° and 98°
-                phase = (i % 30) / 30.0
-                if phase < 0.3:
-                    angle = 5.0 + (93.0 * (phase / 0.3))
-                elif phase < 0.7:
-                    angle = 98.0 + (math.sin(i * 0.4) * 1.5)
+    @action(detail=True, methods=["post"])
+    def transition(self, request, pk=None):
+        data = SessionTransitionSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        operation = data.validated_data["operation"]
+        with transaction.atomic():
+            scoped = self.get_object()
+            session = Session.objects.select_for_update().get(pk=scoped.pk)
+            terminal = {"finish": Session.Status.COMPLETED, "abandon": Session.Status.ABANDONED}
+            if session.status != Session.Status.IN_PROGRESS:
+                if terminal.get(operation) == session.status:
+                    if operation == "finish" and data.validated_data.get("patient_reported_reps") != session.patient_reported_reps:
+                        return Response({"detail": "Finalization payload conflicts with saved values."}, status=409)
+                    return Response(SessionSerializer(session).data)
+                return Response({"detail": "Session is already closed."}, status=409)
+            if operation == "pause":
+                session.paused_at = session.paused_at or timezone.now()
+            elif operation == "resume":
+                session.paused_at = None
+            else:
+                if operation == "finish" and "patient_reported_reps" not in data.validated_data:
+                    return Response({"patient_reported_reps": "Required to finish."}, status=400)
+                from .services import summarize
+                for key, value in summarize(session).items():
+                    setattr(session, key, value)
+                session.status = terminal[operation]
+                session.ended_at = timezone.now()
+                session.paused_at = None
+                if operation == "finish":
+                    session.patient_reported_reps = data.validated_data["patient_reported_reps"]
                 else:
-                    angle = 98.0 - (93.0 * ((phase - 0.7) / 0.3))
-
-                points.append({
-                    "timestampMs": int(t_sec * 1000),
-                    "kneeAngleDeg": round(angle, 1),
-                    "fsrHeelRaw": int(1400 + math.sin(i * 0.2) * 120),
-                    "fsrToeRaw": int(1500 + math.cos(i * 0.2) * 150),
-                    "skinTemperatureC": round(32.7 + (i * 0.001), 2),
-                    "channelHealth": {
-                        "angle": "READ_OK",
-                        "fsr": "READ_OK",
-                        "temp": "READ_OK",
-                    }
-                })
-
-        downsampled = downsample_lttb(points, max_points)
-        return Response(downsampled)
+                    session.quality_flag = Session.QualityFlag.INCOMPLETE
+            session.save()
+            return Response(SessionSerializer(session).data)
 
 
 class TelemetryIngestView(views.APIView):
@@ -175,62 +182,35 @@ class TelemetryIngestView(views.APIView):
         if not isinstance(device, Device) or device.device_identifier != device_identifier or device.status != Device.Status.ACTIVE:
             return Response({"detail": "Device identity does not match an active credential."}, status=status.HTTP_403_FORBIDDEN)
 
-        session_id = data["session_id"]
-        session = Session.objects.filter(
-            id=session_id, device=device, patient__is_active=True,
-            patient__device_assignments__device=device,
-            patient__device_assignments__active=True,
-        ).first()
-        if not session:
-            return Response({"detail": "Assigned session not found."}, status=status.HTTP_404_NOT_FOUND)
-        if session.status != Session.Status.IN_PROGRESS:
-            return Response({"detail": "Session is not recording."}, status=status.HTTP_409_CONFLICT)
-
-        boot_id = data["boot_id"]
-        seq_num = data["sequence_number"]
-        samples = data["samples"]
-
-        # Idempotency Guard: (device, boot_id, sequence_number)
-        existing = TelemetryBatch.objects.filter(
-            device=device,
-            boot_id=boot_id,
-            sequence_number=seq_num,
-        ).first()
-
-        if existing:
-            if existing.session_id != session.pk:
-                return Response({"detail": "Batch belongs to another session."}, status=status.HTTP_409_CONFLICT)
-            return Response(
-                {"status": "already_stored", "batch_sequence": seq_num},
-                status=status.HTTP_200_OK
-            )
-
-        try:
-            with transaction.atomic():
-                TelemetryBatch.objects.create(
-                    session=session,
-                    device=device,
-                    sequence_number=seq_num,
-                    boot_id=boot_id,
-                    elapsed_ms=data.get("elapsed_ms", 0),
-                    sample_count=len(samples),
-                    raw_payload={"samples": samples},
-                )
-                device.last_seen_at = timezone.now()
-                device.save(update_fields=["last_seen_at"])
-        except IntegrityError:
-            return Response(
-                {"status": "already_stored", "batch_sequence": seq_num},
-                status=status.HTTP_200_OK
-            )
-
-        return Response(
-            {
-                "status": "stored",
-                "session_id": str(session.id),
-                "sequence_number": seq_num,
-                "server_received_at": timezone.now().isoformat(),
-            },
-            status=status.HTTP_201_CREATED
-        )
-
+        # Lock the session for both ingestion and lifecycle transitions.
+        with transaction.atomic():
+            device = Device.objects.select_for_update().get(pk=device.pk)
+            if device.status != Device.Status.ACTIVE:
+                return Response({"detail": "Device is not active."}, status=403)
+            session = Session.objects.select_for_update().filter(
+                id=data["session_id"], device=device, patient__is_active=True,
+                patient__device_assignments__device=device,
+                patient__device_assignments__active=True).first()
+            if not session:
+                return Response({"detail": "Assigned session not found."}, status=404)
+            seq = data["sequence_number"]
+            payload = {key: value for key, value in data.items() if key != "session_id"}
+            existing = TelemetryBatch.objects.filter(device=device, boot_id=data["boot_id"], sequence_number=seq).first()
+            if existing:
+                if existing.session_id != session.pk or existing.raw_payload != payload:
+                    return Response({"detail": "Conflicting duplicate batch."}, status=409)
+                return Response({"status": "already_stored", "sequence_number": seq, "session_id": str(session.pk)})
+            if session.status != Session.Status.IN_PROGRESS or session.paused_at:
+                return Response({"detail": "Session is not recording."}, status=409)
+            previous = session.telemetry_batches.order_by("-elapsed_ms").first()
+            if previous:
+                last_ms = previous.elapsed_ms + previous.raw_payload["samples"][-1]["offset_ms"]
+                if data["elapsed_ms"] + data["samples"][0]["offset_ms"] <= last_ms:
+                    return Response({"elapsed_ms": "Batch overlaps or precedes stored samples."}, status=400)
+                if previous.boot_id == data["boot_id"] and seq <= previous.sequence_number:
+                    return Response({"sequence_number": "Must increase within a boot."}, status=400)
+            TelemetryBatch.objects.create(session=session, device=device, sequence_number=seq,
+                boot_id=data["boot_id"], elapsed_ms=data["elapsed_ms"], sample_count=len(data["samples"]), raw_payload=payload)
+            device.last_seen_at = timezone.now()
+            device.save(update_fields=["last_seen_at"])
+            return Response({"status": "stored", "session_id": str(session.pk), "sequence_number": seq}, status=201)

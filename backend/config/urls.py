@@ -12,7 +12,7 @@ from apps.accounts.views import (
     PatientViewSet,
     AuditLogViewSet,
 )
-from apps.devices.views import DeviceViewSet, TechnicalAlertViewSet
+from apps.devices.views import DeviceViewSet, TechnicalAlertViewSet, DeviceHeartbeatView
 from apps.exercises.views import (
     ExerciseDefinitionViewSet,
     PlanVersionViewSet,
@@ -46,6 +46,8 @@ urlpatterns = [
     path("api/v1/auth/login/", LoginView.as_view(), name="auth-login"),
     path("api/v1/auth/logout/", LogoutView.as_view(), name="auth-logout"),
     path("api/v1/auth/me/", MeView.as_view(), name="auth-me"),
+
+    path("api/v1/devices/heartbeat/", DeviceHeartbeatView.as_view(), name="device-heartbeat"),
 
     # Direct Clinical Endpoints
     path("api/v1/my-plan/", MyPlanView.as_view(), name="my-plan"),

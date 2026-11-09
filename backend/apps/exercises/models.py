@@ -46,6 +46,7 @@ class PlanVersion(models.Model):
     authored_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="authored_plans")
     version_number = models.IntegerField(default=1)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT, db_index=True)
+    schedule = models.JSONField(default=list, blank=True)
     clinical_notes = models.TextField(blank=True)
     published_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -63,7 +64,7 @@ class PlanVersion(models.Model):
         if self.pk:
             original = PlanVersion.objects.filter(pk=self.pk).first()
             if original and original.status in (self.Status.PUBLISHED, self.Status.ARCHIVED):
-                protected = ("clinical_notes", "patient_id", "authored_by_id", "version_number", "published_at")
+                protected = ("schedule", "clinical_notes", "patient_id", "authored_by_id", "version_number", "published_at")
                 changed = any(getattr(self, field) != getattr(original, field) for field in protected)
                 legal_status = self.status == original.status or (original.status == self.Status.PUBLISHED and self.status == self.Status.ARCHIVED)
                 if changed or not legal_status:

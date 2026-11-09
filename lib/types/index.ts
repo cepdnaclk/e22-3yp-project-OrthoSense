@@ -27,7 +27,7 @@ export type SensorHealthStatus =
   | "rail" 
   | "unverified";
 
-export type ChannelHealth = "READ_OK" | "STALE" | "NO_RESPONSE" | "RAIL_ERROR";
+export type ChannelHealth = "READ_OK" | "STALE" | "NO_RESPONSE" | "RAIL_ERROR" | "INVALID" | "UNVERIFIED";
 
 export type DeviceStatus = "online" | "offline" | "unpaired" | "maintenance" | "unknown" | "revoked";
 
@@ -79,7 +79,10 @@ export interface ExercisePlanItem {
   instructions: string;
 }
 
+export interface ExerciseReminder { exercise_id: string; scheduled_at: string; }
+
 export interface ExercisePlan {
+  schedule?: ExerciseReminder[];
   id: string;
   patientId: string;
   patientName: string;
@@ -94,6 +97,14 @@ export interface ExercisePlan {
 }
 
 export interface TelemetryPoint {
+  gapBefore?: Partial<Record<"angle" | "fsr" | "temp" | "kneeAngleDeg" | "fsrHeelRaw" | "fsrToeRaw" | "skinTemperatureC", boolean>>;
+  qualitySummary?: Record<string, Record<string, number>>;
+  sourceSummary?: Record<string, number>;
+  bootSummary?: Record<string, number>;
+  source?: "hardware" | "simulation" | "unknown";
+  serverReceivedAt?: string;
+  bootId?: string;
+  sequenceNumber?: number;
   timestampMs: number;
   kneeAngleDeg: number | null;
   fsrHeelRaw: number | null;
@@ -107,6 +118,9 @@ export interface TelemetryPoint {
 }
 
 export interface ExerciseSession {
+  prescribedItem?: import("@/lib/services/api-contract").PrescriptionDto | null;
+  planAuthorName?: string | null;
+  reviewHistory?: import("@/lib/services/api-contract").ReviewDto[];
   id: string;
   patientId: string;
   patientName: string;
@@ -117,10 +131,10 @@ export interface ExerciseSession {
   endedAt?: string;
   durationSeconds: number;
   targetReps: number;
-  patientReportedReps: number;
-  sensorEstimatedReps: number;
-  maxFlexionDeg: number;
-  maxExtensionDeg: number;
+  patientReportedReps: number | null;
+  sensorEstimatedReps: number | null;
+  maxFlexionDeg: number | null;
+  maxExtensionDeg: number | null;
   status: "completed" | "in_progress" | "abandoned";
   qualityFlag: "good" | "degraded" | "incomplete";
   reviewNotes?: string;

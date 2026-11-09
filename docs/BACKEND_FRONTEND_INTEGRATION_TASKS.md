@@ -208,15 +208,15 @@ Phase acceptance: two different patients see their own profile, prescription, hi
 
 Primary files: `app/admin/devices/page.tsx`, `app/patient/device/page.tsx`, device services, `backend/apps/devices/`.
 
-- [ ] D01 [Both] Add assignment/reassignment/unassignment workflows for registered devices and clinicians, with transaction rules preventing conflicting active assignments and audit events.
-- [ ] D02 [Frontend] Resolve the signed-in patient's assigned device by UUID; remove `list[0]` selection and fixed fallback devices in patient device/record pages.
-- [ ] D03 [Backend] Derive connectivity from authenticated device/gateway heartbeat evidence and a defined freshness policy; do not infer it from `ACTIVE` or enrollment time.
+- [x] D01 [Both] Add assignment/reassignment/unassignment workflows for registered devices and clinicians, with transaction rules preventing conflicting active assignments and audit events.
+- [x] D02 [Frontend] Resolve the signed-in patient's assigned device by UUID; remove `list[0]` selection and fixed fallback devices in patient device/record pages.
+- [x] D03 [Backend] Derive connectivity from authenticated device/gateway heartbeat evidence and a defined freshness policy; do not infer it from `ACTIVE` or enrollment time.
 - [x] D04 [Backend] Replace browser `ping` updating `last_seen_at` with an honest server-connectivity response or an acknowledged device diagnostic operation; a web request must not prove device contact.
-- [ ] D05 [Both] Persist/expose measured battery voltage/percentage, firmware, sensor health, timestamps and capability information without default healthy readings.
+- [x] D05 [Both] Persist/expose measured battery voltage/percentage, firmware, sensor health, timestamps and capability information without default healthy readings.
 - [ ] D06 [Both] Replace timed “diagnostics passed” and preflight checks with measured freshness/quality or acknowledged diagnostic jobs; expose failures/timeouts/unverified results.
-- [ ] D07 [Backend] Store only credential verification material after one-time provisioning; remove persistent raw-token display storage, and implement controlled rotation/re-pairing if needed.
-- [ ] D08 [Both] Initialize only supported channels from the actual hardware profile. Align MPU6050 versus displayed LSM6DSOX, sensor counts, sampling rates and units; do not initialize unobserved channels as healthy.
-- [ ] D09 [Both] Connect technical alerts to real health events and scoped UI; implement acknowledged/resolved status if included in the MVP.
+- [x] D07 [Backend] Store only credential verification material after one-time provisioning; remove persistent raw-token display storage, and implement controlled rotation/re-pairing if needed.
+- [x] D08 [Both] Initialize only supported channels from the actual hardware profile. Align MPU6050 versus displayed LSM6DSOX, sensor counts, sampling rates and units; do not initialize unobserved channels as healthy.
+- [x] D09 [Both] Connect technical alerts to real health events and scoped UI; implement acknowledged/resolved status if included in the MVP.
 
 Phase acceptance: unplugging/stopping the device makes it stale/offline; opening or pinging the website cannot make it online; another patient's device never appears as the current patient's device.
 
@@ -226,37 +226,41 @@ Primary files: `app/patient/session/record/page.tsx`, telemetry/device authentic
 
 - [x] S01 [Backend, P0] Require a permitted device/gateway identity for ingestion and bind the body device ID to the authenticated credential. Reject mismatches and unprovisioned devices.
 - [x] S02 [Backend, P0] Check session/device/patient assignment and session state on every ingest; remove unrestricted auto-registration and fallback session ownership.
-- [ ] S03 [Both] Define start, pause/resume, finish and abandon semantics, including timestamps and partial-data retention; persist a session ID before streaming samples.
-- [ ] S04 [Both] Bind the session to a selected prescribed item, published version and active assigned device; avoid hardcoded exercise/target values.
+- [x] S03 [Both] Define start, pause/resume, finish and abandon semantics, including timestamps and partial-data retention; persist a session ID before streaming samples.
+- [x] S04 [Both] Bind the session to a selected prescribed item, published version and active assigned device; avoid hardcoded exercise/target values.
 - [ ] S05 [Edge/gateway] Select and implement the actual transport path: direct HTTPS or BLE plus a gateway. Define versioned packets, boot/session IDs, units, monotonic offsets, sequence counters and acknowledgments.
 - [ ] S06 [Both] Carry all supported channel health/provenance/timestamps through ingestion/storage/retrieval; align edge debug fields with the agreed API format through an explicit encoder/adapter.
-- [ ] S07 [Backend] Validate batch size, sample counts, time ordering, finite values, array shapes, sequence bounds and `max_points`; return structured client errors.
+- [x] S07 [Backend] Validate batch size, sample counts, time ordering, finite values, array shapes, sequence bounds and `max_points`; return structured client errors.
 - [ ] S08 [Edge/gateway/backend] Preserve deduplication and add bounded retry/backoff/offline buffering; detect conflicting duplicate payloads, gaps and reconnects across boot IDs.
-- [ ] S09 [Frontend] Replace simulated angles and time-based rep increments with actual samples/server results; show disconnected/stale/unsupported states.
-- [ ] S10 [Backend] Connect the summary helper or a validated replacement to completion; compute measured duration/ROM/reps/quality from valid samples and the applicable exercise configuration.
-- [ ] S11 [Both] Keep manual patient reps distinct from sensor estimates; represent unavailable estimates as unavailable rather than copying defaults/manual counts.
-- [ ] S12 [Frontend] Submit the corrected request DTO, use the returned session ID, show success only after acknowledgment, preserve work on failure and prevent duplicate finalization.
-- [ ] S13 [Both] Persist abandonment/incomplete quality according to the chosen lifecycle and keep clinician review restricted to the review operation.
+- [x] S09 [Frontend] Replace simulated angles and time-based rep increments with actual samples/server results; show disconnected/stale/unsupported states.
+- [x] S10 [Backend] Connect the summary helper or a validated replacement to completion; compute measured duration/ROM/reps/quality from valid samples and the applicable exercise configuration.
+- [x] S11 [Both] Keep manual patient reps distinct from sensor estimates; represent unavailable estimates as unavailable rather than copying defaults/manual counts.
+- [x] S12 [Frontend] Submit the corrected request DTO, use the returned session ID, show success only after acknowledgment, preserve work on failure and prevent duplicate finalization.
+- [x] S13 [Both] Persist abandonment/incomplete quality according to the chosen lifecycle and keep clinician review restricted to the review operation.
 
 Phase acceptance: a recorded session has real samples under one authorized session/device identity; retries do not duplicate data; loss of backend/device produces a truthful state and never a false saved confirmation.
+
+Phase 6 software progress: see [session lifecycle, packet contract and gateway handoff](PHASE_6_RECORDING_HANDOFF.md). S05/S06/S08 remain open for live firmware transport, channel/timestamp alignment on hardware, and reboot/offline recovery acceptance. Host HTTPS outbox and simulation debug adapter are implemented and tested; physical phase acceptance is not claimed.
 
 ### Phase 7 — Clinician views, telemetry and reports (P1)
 
 Primary files: doctor pages, `app/reports/session/[id]/page.tsx`, `components/features/TelemetryChart.tsx`, analytics/telemetry endpoints.
 
-- [ ] R01 [Both] Add backend patient/date/status/review filters for sessions; patient detail must request only that patient's sessions while retaining server authorization.
-- [ ] R02 [Both] Replace dashboard page-length counts and fixed patient-detail device/compliance snapshots with scoped totals and agreed reporting periods.
-- [ ] R03 [Backend] Return an empty telemetry result when no data exists; remove generated waves, placeholder angle conversion, substituted measurements and forced `READ_OK` flags from normal retrieval.
-- [ ] R04 [Frontend] Render timestamp-based charts with gaps for null/invalid/stale channels; handle one-point input, avoid connecting across missing intervals and use meaningful per-channel scales/units.
-- [ ] R05 [Both] Preserve quality/provenance and important extrema through downsampling; bound `max_points`. Clarify that knee-angle-based LTTB does not guarantee pressure/temperature peak preservation.
-- [ ] R06 [Frontend] After review, refresh canonical review status, author, time and notes; handle duplicate submissions and editing an already-reviewed session explicitly.
-- [ ] R07 [Both] Implement patient/date-scoped longitudinal trends with defined formulas; replace the fixed 75-to-105-degree and 92-percent report values.
-- [ ] R08 [Frontend] Fix report navigation to pass a session UUID; introduce a separate patient-report route only if a patient-level report is required.
-- [ ] R09 [Frontend] Remove report fallback identities/notes/authorization stamps; show not-found/forbidden/error states and actual reviewed/pending status.
-- [ ] R10 [Both] Build reports from the session's referenced prescription version and actual review author. Derive comparisons from stored targets rather than unconditional “goal exceeded” or “100% agreement” labels.
-- [ ] R11 [Both] Label the existing CSV as a downsampled view; add a separately authorized full-data export only if required, including units, quality and provenance.
+- [x] R01 [Both] Add backend patient/date/status/review filters for sessions; patient detail must request only that patient's sessions while retaining server authorization.
+- [x] R02 [Both] Replace dashboard page-length counts and fixed patient-detail device/compliance snapshots with scoped totals and agreed reporting periods.
+- [x] R03 [Backend] Return an empty telemetry result when no data exists; remove generated waves, placeholder angle conversion, substituted measurements and forced `READ_OK` flags from normal retrieval.
+- [x] R04 [Frontend] Render timestamp-based charts with gaps for null/invalid/stale channels; handle one-point input, avoid connecting across missing intervals and use meaningful per-channel scales/units.
+- [x] R05 [Both] Preserve quality/provenance and important extrema through downsampling; bound `max_points`. Clarify that knee-angle-based LTTB does not guarantee pressure/temperature peak preservation.
+- [x] R06 [Frontend] After review, refresh canonical review status, author, time and notes; handle duplicate submissions and editing an already-reviewed session explicitly.
+- [x] R07 [Both] Implement patient/date-scoped longitudinal trends with defined formulas; replace the fixed 75-to-105-degree and 92-percent report values.
+- [x] R08 [Frontend] Fix report navigation to pass a session UUID; introduce a separate patient-report route only if a patient-level report is required.
+- [x] R09 [Frontend] Remove report fallback identities/notes/authorization stamps; show not-found/forbidden/error states and actual reviewed/pending status.
+- [x] R10 [Both] Build reports from the session's referenced prescription version and actual review author. Derive comparisons from stored targets rather than unconditional “goal exceeded” or “100% agreement” labels.
+- [x] R11 [Both] Label the existing CSV as a downsampled view; add a separately authorized full-data export only if required, including units, quality and provenance.
 
 Phase acceptance: all screens and exports agree on the same stored patient/session/version; missing data cannot turn into a completed or reviewed report.
+
+Phase 7 software implementation: see [clinician summaries, review, telemetry and report handoff](PHASE_7_CLINICIAN_HANDOFF.md). Automated API/contract/static-render checks are recorded there. Live browser/print and deployed-device acceptance remain separate; adherence stays unavailable until a schedule-matching contract exists.
 
 ### Phase 8 — Administration and operational health (P1/P2)
 
@@ -291,6 +295,8 @@ Primary files: `app/admin/`, account/device APIs, `backend/apps/analytics/views.
 Phase 3 completion: see [persisted plan summary and manual tests](PHASE_3_PLANS_HANDOFF.md).
 
 Phase 4 implementation: see [patient interface handoff](PHASE_4_PATIENT_HANDOFF.md). Unsupported preferences are removed; schedule-dependent adherence calculations require a future schedule contract.
+
+Phase 5 software: see [device and hardware heartbeat handoff](PHASE_5_DEVICES_HANDOFF.md). Hardware acknowledgment/physical testing remains separate.
 
 ## Suggested implementation order
 

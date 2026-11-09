@@ -7,8 +7,11 @@ export function usePatientData() {
   const [error,setError] = React.useState("");
   React.useEffect(() => {
     let active = true;
-    load().then(value => {if(active) setData(value);}).catch(() => {if(active) setError("Unable to load your information. Check your connection and reload.");});
-    return () => {active=false;};
+    const refresh=() => load().then(value => {if(active) {setData(value);setError("");}}).catch(() => {if(active) setError("Unable to load your information. Check your connection and reload.");});
+    void refresh();
+    const timer=setInterval(() => void refresh(),30000);
+    window.addEventListener("focus",refresh);
+    return () => {active=false;clearInterval(timer);window.removeEventListener("focus",refresh);};
   },[]);
   return {data,error};
 }

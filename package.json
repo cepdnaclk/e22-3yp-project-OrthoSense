@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit --incremental false",
-    "test:auth": "node --test tests/auth.test.mjs"
+    "test:auth": "node --test tests/auth.test.mjs",
+    "test:clinical": "node --test tests/clinical.test.mjs"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.3.4",

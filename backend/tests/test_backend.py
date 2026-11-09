@@ -128,6 +128,7 @@ def test_telemetry_device_ingest_and_idempotency(api_client, seed_environment):
     session = Session.objects.create(patient=pat_a, device=device, status=Session.Status.IN_PROGRESS)
 
     payload = {
+        "schema_version": 1, "source": "hardware",
         "device_id": device.device_identifier,
         "boot_id": "urn:uuid:boot-test-1122",
         "session_id": str(session.id),
@@ -137,8 +138,8 @@ def test_telemetry_device_ingest_and_idempotency(api_client, seed_environment):
             {
                 "offset_ms": 0,
                 "knee_angle_deg": 94.5,
-                "imu1": {"accel": [0.0, 9.8, 0.0]},
-                "imu2": {"accel": [0.0, 9.8, 0.0]},
+                "imu1": {"accel_m_s2": [0.0, 9.8, 0.0], "gyro_deg_s": [0,0,0]},
+                "imu2": {"accel_m_s2": [0.0, 9.8, 0.0], "gyro_deg_s": [0,0,0]},
                 "fsr": [1400.0, 1500.0],
                 "temp_c": [32.8],
             }
@@ -167,7 +168,7 @@ def test_downsampled_telemetry_endpoint(api_client, seed_environment):
     resp = api_client.get(f"/api/v1/sessions/{session.id}/telemetry/?max_points=50")
     assert resp.status_code == 200
     assert len(resp.data) <= 50
-    assert "kneeAngleDeg" in resp.data[0]
+    assert resp.data == []  # Missing telemetry must never fabricate a waveform.
 
 
 def test_invalid_device_token_rejected(api_client, seed_environment):
