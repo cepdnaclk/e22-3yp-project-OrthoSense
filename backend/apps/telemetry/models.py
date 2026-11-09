@@ -25,6 +25,8 @@ class Session(models.Model):
     patient = models.ForeignKey(User, on_delete=models.CASCADE, related_name="telemetry_sessions")
     device = models.ForeignKey(Device, null=True, blank=True, on_delete=models.SET_NULL, related_name="recorded_sessions")
     plan_version = models.ForeignKey(PlanVersion, null=True, blank=True, on_delete=models.SET_NULL, related_name="guided_sessions")
+    prescription = models.ForeignKey("exercises.ExercisePrescription", null=True, blank=True, on_delete=models.PROTECT)
+    paused_at = models.DateTimeField(null=True, blank=True)
     exercise_name = models.CharField(max_length=255, default="Active Knee Flexion")
     started_at = models.DateTimeField(default=timezone.now, db_index=True)
     ended_at = models.DateTimeField(null=True, blank=True)
@@ -34,10 +36,10 @@ class Session(models.Model):
     
     # Repetition Counts & Biomechanical Milestones
     target_reps = models.IntegerField(default=10)
-    patient_reported_reps = models.IntegerField(default=10)
-    sensor_estimated_reps = models.IntegerField(default=10)
-    max_flexion_deg = models.FloatField(default=98.0)
-    max_extension_deg = models.FloatField(default=5.0)
+    patient_reported_reps = models.IntegerField(null=True, blank=True)
+    sensor_estimated_reps = models.IntegerField(null=True, blank=True)
+    max_flexion_deg = models.FloatField(null=True, blank=True)
+    max_extension_deg = models.FloatField(null=True, blank=True)
 
     # Doctor Review Status
     doctor_reviewed = models.BooleanField(default=False, db_index=True)

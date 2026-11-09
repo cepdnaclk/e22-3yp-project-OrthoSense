@@ -19,6 +19,7 @@ class Device(models.Model):
     hardware_revision = models.CharField(max_length=50, default="v2.1-BionicX")
     firmware_version = models.CharField(max_length=50, default="v2.1.0-RC4")
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.ACTIVE, db_index=True)
+    health_report = models.JSONField(default=dict, blank=True)
     battery_percent = models.IntegerField(default=94)
     battery_voltage = models.FloatField(default=3.98)
     last_seen_at = models.DateTimeField(null=True, blank=True, db_index=True)

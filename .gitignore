@@ -42,3 +42,7 @@ next-env.d.ts
 
 !/.env.example
 !/backend/.env.example
+
+# Local gateway telemetry outbox
+/edge/gateway/*.sqlite3*
+/edge/gateway/__pycache__/

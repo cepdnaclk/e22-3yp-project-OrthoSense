@@ -1,384 +1,110 @@
 "use client";
-
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/ui/AppShell";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Input } from "@/components/ui/Input";
-import { plansApi, sessionsApi, devicesApi } from "@/lib/services/api";
-import { ExercisePlanItem } from "@/lib/types";
-import {
-  Play,
-  Pause,
-  Square,
-  RotateCcw,
-  CheckCircle2,
-  AlertCircle,
-  Radio,
-  BatteryCharging,
-  ArrowLeft,
-  ChevronRight,
-} from "lucide-react";
+import { usePatientData } from "@/components/features/usePatientData";
+import { sessionsApi } from "@/lib/services/api";
+import type { SessionDto } from "@/lib/services/api-contract";
+import type { TelemetryPoint } from "@/lib/types";
 
 export default function RecordSessionPage() {
-  const router = useRouter();
-  const [device, setDevice] = React.useState({
-    serialNumber: "ESP32-S3-ORTHO-092",
-    batteryPercent: 94,
-  });
-
-  React.useEffect(() => {
-    async function loadDevice() {
-      try {
-        const list = await devicesApi.getAll();
-        if (list && list.length > 0) {
-          setDevice({
-            serialNumber: list[0].serialNumber,
-            batteryPercent: list[0].batteryPercent ?? 94,
-          });
-        }
-      } catch {
-        // Fallback default
-      }
-    }
-    loadDevice();
-  }, []);
-
-  // Pre-flight checks
-  const [preflightPassed, setPreflightPassed] = React.useState(false);
-  const [preflightStep, setPreflightStep] = React.useState(0);
-
-  // Recording State
-  const [sessionState, setSessionState] = React.useState<"idle" | "running" | "paused" | "finished">("idle");
-  const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
-  const [sensorReps, setSensorReps] = React.useState(0);
-  const [patientReps, setPatientReps] = React.useState(10);
-  const [currentAngle, setCurrentAngle] = React.useState(15);
-  const [submitting, setSubmitting] = React.useState(false);
-  const [finishSuccess, setFinishSuccess] = React.useState(false);
-
-  // Run preflight check
-  React.useEffect(() => {
-    const timer1 = setTimeout(() => setPreflightStep(1), 500); // Check hardware ping
-    const timer2 = setTimeout(() => setPreflightStep(2), 1100); // Check IMU1 & IMU2
-    const timer3 = setTimeout(() => {
-      setPreflightStep(3);
-      setPreflightPassed(true);
-    }, 1800);
-
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
-    };
-  }, []);
-
-  // Timer loop when running
-  React.useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (sessionState === "running") {
-      interval = setInterval(() => {
-        setElapsedSeconds((prev) => prev + 1);
-
-        // Simulate real-time angle oscillation
-        const t = Date.now() / 1000;
-        const angle = Math.round(50 + 45 * Math.sin(t * 1.5));
-        setCurrentAngle(Math.max(2, angle));
-
-        // Increment rep every 5 seconds of movement
-        if (elapsedSeconds > 0 && elapsedSeconds % 5 === 0) {
-          setSensorReps((r) => Math.min(10, r + 1));
-        }
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [sessionState, elapsedSeconds]);
-
-  const handleStart = () => {
-    setSessionState("running");
-  };
-
-  const handlePause = () => {
-    setSessionState("paused");
-  };
-
-  const handleResume = () => {
-    setSessionState("running");
-  };
-
-  const handleFinish = () => {
-    setSessionState("finished");
-    setPatientReps(sensorReps || 10);
-  };
-
-  const handleAbandon = () => {
-    if (confirm("Are you sure you want to abandon this session? Recorded partial data will not be submitted.")) {
-      router.push("/patient/dashboard");
-    }
-  };
-
-  const handleSubmitSession = async () => {
-    setSubmitting(true);
-    try {
-      await sessionsApi.create({
-        exerciseName: "Active Knee Flexion",
-        targetReps: 10,
-        patientReportedReps: patientReps,
-        sensorEstimatedReps: sensorReps,
-        durationSeconds: elapsedSeconds,
-        maxFlexionDeg: 98.4,
-        maxExtensionDeg: 4.5,
-        status: "completed",
-      });
-      setFinishSuccess(true);
-      setTimeout(() => {
-        router.push("/patient/dashboard");
-      }, 1500);
-    } catch {
-      alert("Session was not saved. Check the connection and retry.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const formatTime = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  };
-
-  return (
-    <AppShell>
-      <div className="space-y-6 max-w-4xl mx-auto">
-        <div className="flex items-center justify-between">
-          <Link href="/patient/dashboard">
-            <Button size="sm" variant="outline" className="gap-1.5">
-              <ArrowLeft className="h-4 w-4" /> Back to Dashboard
-            </Button>
-          </Link>
-          <span className="text-xs text-slate-500 font-mono">
-            Device: {device.serialNumber} (Battery: {device.batteryPercent}%)
-          </span>
-        </div>
-
-        {/* Pre-Flight Sensor Check Card (Task W4.3) */}
-        {!preflightPassed ? (
-          <Card className="border-teal-300">
-            <CardHeader>
-              <CardTitle>ESP32-S3 Hardware Pre-Flight Verification</CardTitle>
-              <CardDescription>
-                Checking edge sensor telemetry connectivity before session initialization...
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between text-xs p-2.5 rounded-lg bg-slate-50">
-                <span>1. Microcontroller WiFi / BLE Handshake:</span>
-                {preflightStep >= 1 ? (
-                  <StatusBadge status="healthy" labelOverride="CONNECTED" size="sm" />
-                ) : (
-                  <span className="text-slate-400 animate-pulse">Pinging...</span>
-                )}
-              </div>
-              <div className="flex items-center justify-between text-xs p-2.5 rounded-lg bg-slate-50">
-                <span>2. Dual IMU Accelerometer Alignment:</span>
-                {preflightStep >= 2 ? (
-                  <StatusBadge status="healthy" labelOverride="IMU 1 & 2 READY" size="sm" />
-                ) : (
-                  <span className="text-slate-400">Waiting...</span>
-                )}
-              </div>
-              <div className="flex items-center justify-between text-xs p-2.5 rounded-lg bg-slate-50">
-                <span>3. Battery Charge Level:</span>
-                {preflightStep >= 3 ? (
-                  <StatusBadge status="healthy" labelOverride={`${device.batteryPercent}% (SUFFICIENT)`} size="sm" />
-                ) : (
-                  <span className="text-slate-400">Verifying...</span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ) : sessionState !== "finished" ? (
-          /* Active Recording Console */
-          <div className="space-y-6">
-            <Card className="overflow-hidden border-2 border-teal-600">
-              <div className="bg-[#0F766E] text-white p-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Radio className={sessionState === "running" ? "h-5 w-5 animate-pulse text-teal-200" : "h-5 w-5"} />
-                  <span className="font-bold text-sm tracking-wide uppercase">
-                    {sessionState === "running"
-                      ? "Recording Session in Progress — Exercise at your comfortable pace"
-                      : sessionState === "paused"
-                      ? "Session Paused"
-                      : "Ready to Begin Routine"}
-                  </span>
-                </div>
-                <span className="font-mono text-xl font-bold bg-teal-800/80 px-3 py-1 rounded-md">
-                  {formatTime(elapsedSeconds)}
-                </span>
-              </div>
-
-              <CardContent className="p-6 space-y-6">
-                <div className="text-center space-y-1">
-                  <h2 className="text-xl font-bold text-slate-900">
-                    Active Knee Flexion & Extension
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Goal: 10 repetitions • Keep movement smooth and controlled
-                  </p>
-                </div>
-
-                {/* Live Knee Angle Meter */}
-                <div className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                  <span className="text-xs uppercase font-semibold text-slate-400">
-                    Live Knee Joint Angle
-                  </span>
-                  <div className="text-5xl font-extrabold text-[#0F766E] font-mono">
-                    {currentAngle}°
-                  </div>
-                  <div className="w-full max-w-md bg-slate-200 h-3 rounded-full overflow-hidden">
-                    <div
-                      className="bg-[#0F766E] h-full transition-all duration-300"
-                      style={{ width: `${Math.min(100, (currentAngle / 105) * 100)}%` }}
-                    ></div>
-                  </div>
-                  <span className="text-xs text-slate-500">
-                    Target Flexion: <span className="font-semibold text-slate-800">105°</span>
-                  </span>
-                </div>
-
-                {/* Live Rep Counters */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 rounded-xl border border-slate-200 bg-white text-center space-y-1">
-                    <span className="text-xs font-semibold text-slate-400 uppercase">
-                      Sensor-Estimated Reps
-                    </span>
-                    <p className="text-3xl font-extrabold text-teal-800 font-mono">
-                      {sensorReps} <span className="text-sm font-normal text-slate-400">/ 10</span>
-                    </p>
-                    <p className="text-[11px] text-teal-600 font-medium">Computed by ESP32-S3 IMUs</p>
-                  </div>
-
-                  <div className="p-4 rounded-xl border border-slate-200 bg-white text-center space-y-1">
-                    <span className="text-xs font-semibold text-slate-400 uppercase">
-                      Target Repetitions
-                    </span>
-                    <p className="text-3xl font-extrabold text-slate-800 font-mono">10</p>
-                    <p className="text-[11px] text-slate-500">Prescribed by Dr. Vance</p>
-                  </div>
-                </div>
-
-                {/* Control Action Buttons */}
-                <div className="flex flex-wrap items-center justify-center gap-3 pt-4 border-t border-slate-100">
-                  {sessionState === "idle" && (
-                    <Button size="lg" variant="primary" onClick={handleStart} className="gap-2 px-8">
-                      <Play className="h-5 w-5 fill-current" /> Start Recording
-                    </Button>
-                  )}
-                  {sessionState === "running" && (
-                    <>
-                      <Button size="lg" variant="secondary" onClick={handlePause} className="gap-2">
-                        <Pause className="h-5 w-5" /> Pause
-                      </Button>
-                      <Button size="lg" variant="primary" onClick={handleFinish} className="gap-2 px-6">
-                        <Square className="h-5 w-5 fill-current" /> Finish Session
-                      </Button>
-                      <Button size="lg" variant="ghost" onClick={handleAbandon} className="text-red-600 hover:bg-red-50">
-                        Abandon
-                      </Button>
-                    </>
-                  )}
-                  {sessionState === "paused" && (
-                    <>
-                      <Button size="lg" variant="primary" onClick={handleResume} className="gap-2 px-6">
-                        <Play className="h-5 w-5 fill-current" /> Resume
-                      </Button>
-                      <Button size="lg" variant="secondary" onClick={handleFinish} className="gap-2">
-                        <Square className="h-5 w-5 fill-current" /> Finish Session
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        ) : (
-          /* Dual Completion Tracking Summary Screen (Task W4.4) */
-          <Card className="border-teal-400">
-            <CardHeader className="text-center pb-2">
-              <div className="h-12 w-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-2">
-                <CheckCircle2 className="h-6 w-6" />
-              </div>
-              <CardTitle className="text-xl">Session Completed!</CardTitle>
-              <CardDescription>
-                Confirm your completed repetitions before transmitting telemetry to your clinical team.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6 pt-4">
-              {finishSuccess ? (
-                <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-center space-y-2">
-                  <p className="font-bold">Telemetry Data Successfully Uploaded</p>
-                  <p className="text-xs text-emerald-700">Redirecting to your dashboard...</p>
-                </div>
-              ) : (
-                <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Field 1: Patient-reported repetitions */}
-                    <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/50 space-y-3">
-                      <div>
-                        <span className="text-xs uppercase font-bold text-blue-800">Field 1 (Manual)</span>
-                        <h4 className="text-sm font-semibold text-slate-900">Your Self-Reported Reps</h4>
-                        <p className="text-xs text-slate-500">How many reps did you complete?</p>
-                      </div>
-                      <Input
-                        type="number"
-                        min="0"
-                        max="50"
-                        value={patientReps}
-                        onChange={(e) => setPatientReps(parseInt(e.target.value) || 0)}
-                        className="text-lg font-bold"
-                      />
-                    </div>
-
-                    {/* Field 2: Sensor-derived estimated repetitions */}
-                    <div className="p-4 rounded-xl border border-teal-200 bg-teal-50/50 space-y-3">
-                      <div>
-                        <span className="text-xs uppercase font-bold text-teal-800">Field 2 (Edge Sensor)</span>
-                        <h4 className="text-sm font-semibold text-slate-900">Sensor-Derived Reps</h4>
-                        <p className="text-xs text-slate-500">Calculated from IMU inflection angles</p>
-                      </div>
-                      <div className="h-10 px-3 py-2 bg-white rounded-lg border border-teal-300 font-mono font-bold text-lg text-teal-800 flex items-center">
-                        {sensorReps || 10} Repetitions
-                      </div>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-slate-500 text-center leading-relaxed">
-                    Note: Both your self-reported count and the sensor-calculated count are preserved side-by-side in your permanent medical telemetry record for Dr. Vance to inspect.
-                  </p>
-
-                  <div className="flex justify-end gap-3 pt-2">
-                    <Button variant="ghost" onClick={() => router.push("/patient/dashboard")}>
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="primary"
-                      loading={submitting}
-                      onClick={handleSubmitSession}
-                      className="px-6"
-                    >
-                      Submit Session & Upload Telemetry
-                    </Button>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        )}
-      </div>
-    </AppShell>
-  );
+  return <React.Suspense fallback={<p>Loading recorder?</p>}><Recorder /></React.Suspense>;
 }
-
+function Recorder() {
+  const params=useSearchParams();
+  const {data,error:loadError} = usePatientData();
+  const [prescription,setPrescription] = React.useState("");
+  const [session,setSession] = React.useState<SessionDto | null>(null);
+  const [points,setPoints] = React.useState<TelemetryPoint[]>([]);
+  const [error,setError] = React.useState("");
+  const [busy,setBusy] = React.useState(false);
+  const [reps,setReps] = React.useState("");
+  const [connected,setConnected] = React.useState(false);
+  const [sampleAt,setSampleAt] = React.useState(0);
+  const [now,setNow] = React.useState(0);
+  const gate = React.useRef(false);
+  const requestId = React.useRef("");
+  const lastSample = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    const saved = sessionStorage.getItem("orthosense-recording");
+    if (saved) {requestId.current=saved; void sessionsApi.current(saved).then(setSession).catch(() => setError("Could not restore your recording. Retry before starting another session."));}
+  },[]);
+  const sessionId=session?.id;
+  const sessionStatus=session?.status;
+  React.useEffect(() => {
+    if (!sessionId || sessionStatus !== "in_progress") return;
+    let active=true;
+    const refresh=async () => {
+      try {
+        const [saved,samples] = await Promise.all([sessionsApi.current(sessionId),sessionsApi.getTelemetry(sessionId)]);
+        if (!active || gate.current) return;
+        setSession(saved);setPoints(samples);setConnected(true);
+        const timestamp=samples.at(-1)?.timestampMs ?? null;
+        if (timestamp !== null && timestamp !== lastSample.current) {lastSample.current=timestamp;setSampleAt(Date.parse(samples.at(-1)?.serverReceivedAt ?? "") || 0);}
+        setNow(Date.now());
+      } catch {if(active) {setConnected(false);setNow(Date.now());}}
+    };
+    void refresh();const timer=setInterval(() => void refresh(),2000);
+    return () => {active=false;clearInterval(timer);};
+  },[sessionId,sessionStatus]);
+  const item=data?.plan?.items.find(value => value.id===(prescription || params.get("prescription")));
+  const ready=!!item && data?.device?.status==="online" && data.device.sensorHealth.imuThigh==="healthy" && data.device.sensorHealth.imuShank==="healthy";
+  async function act(operation: "start" | "pause" | "resume" | "finish" | "abandon") {
+    if (gate.current) return;
+    gate.current=true;setBusy(true);setError("");
+    try {
+      if(operation === "start") {
+        if(!item) throw new Error("Select a published prescription first.");
+        requestId.current ||= crypto.randomUUID();
+        sessionStorage.setItem("orthosense-recording",requestId.current);
+        setSession(await sessionsApi.start(item.id,requestId.current));
+      } else if(session) {
+        if(operation === "finish" && (!/^\d+$/.test(reps) || Number(reps)>10000)) throw new Error("Enter your completed repetitions (0?10000).");
+        const saved=await sessionsApi.transition(session.id,operation,operation==="finish" ? Number(reps) : undefined);
+        setSession(saved);
+        if(saved.status!=="in_progress") sessionStorage.removeItem("orthosense-recording");
+      }
+    } catch(e) {setError(e instanceof Error ? e.message : "The request failed. Your session is retained; retry.");}
+    finally {gate.current=false;setBusy(false);}
+  }
+  const latest=points.at(-1);
+  const fresh=connected && sampleAt>0 && now-sampleAt<10000;
+  const angle=fresh && latest?.source==="hardware" && latest?.channelHealth.angle==="READ_OK" ? latest.kneeAngleDeg : null;
+  return <AppShell><main className="mx-auto max-w-3xl space-y-5 rounded-xl border bg-white p-6">
+    <Link href="/patient/exercises" className="text-teal-700 underline">Back to prescribed exercises</Link>
+    <h1 className="text-2xl font-bold">Session recorder</h1>
+    {(error || loadError) && <p role="alert" className="text-red-700">{error || loadError}</p>}
+    {!data && !loadError && <p>Loading prescription and assigned device?</p>}
+    {!session ? <>
+      <label className="block">Published exercise <select className="block w-full rounded border p-2" value={prescription || params.get("prescription") || ""} onChange={e => setPrescription(e.target.value)}>
+        <option value="">Select an exercise</option>{data?.plan?.items.map(i => <option key={i.id} value={i.id}>{i.exerciseName}</option>)}
+      </select></label>
+      {item && <p>{item.targetSets} sets ? {item.targetReps} repetitions. Extension {item.targetExtensionDeg}?; flexion {item.targetFlexionDeg}?. {item.instructions}</p>}
+      <p>Assigned device: {data?.device?.serialNumber ?? "None"}. Status: {data?.device?.status ?? "unknown"}.</p>
+      {!ready && <p>A published prescription and fresh, healthy dual IMUs are required to start.</p>}
+      <Button disabled={!ready || busy} onClick={() => void act("start")}>Start recording</Button>
+    </> : <>
+      <h2 className="text-xl font-semibold">{session.exercise_name}</h2>
+      <p className="break-all">Session: {session.id} ? plan version {session.plan_version_number ?? "unavailable"}</p>
+      <p>Status: {session.status}{session.paused_at ? " (paused)" : ""}. Target: {session.target_reps} repetitions.</p>
+      {session.status==="in_progress" ? <>
+        <p role="status">{!connected ? "Backend connection unavailable" : fresh ? "Receiving samples" : "No fresh samples ? check the device and gateway"}</p>
+        <p>Latest knee angle: {angle === null || angle === undefined ? "Unavailable" : `${angle}?`}</p>
+        <p>Sensor repetitions are calculated on completion from valid hardware angles. Unsupported or simulated angles remain unavailable.</p>
+        <label className="block">Your completed repetitions <input className="ml-2 rounded border p-2" type="number" min="0" max="10000" value={reps} onChange={e => setReps(e.target.value)} /></label>
+        <div className="flex flex-wrap gap-3">
+          <Button disabled={busy} onClick={() => void act(session.paused_at ? "resume" : "pause")}>{session.paused_at ? "Resume" : "Pause"}</Button>
+          <Button disabled={busy} onClick={() => void act("finish")}>Save and finish</Button>
+          <Button disabled={busy} variant="outline" onClick={() => {if(confirm("Abandon this session? Partial samples will be retained.")) void act("abandon");}}>Abandon</Button>
+        </div><p>Before finishing, stop acquisition and confirm the gateway has acknowledged all queued samples. Paused or closed sessions reject new batches.</p>
+      </> : <div role="status">
+        <p>Session {session.status} and saved by the server.</p>
+        <p>Manual reps: {session.patient_reported_reps ?? "Unavailable"}. Sensor estimate: {session.sensor_estimated_reps ?? "Unavailable"}.</p>
+        <p>Measured duration: {session.duration_seconds}s. Maximum flexion: {session.max_flexion_deg ?? "Unavailable"}. Quality: {session.quality_flag}.</p>
+        <Link href="/patient/sessions" className="underline">View saved history</Link>
+      </div>}
+    </>}
+  </main></AppShell>;
+}

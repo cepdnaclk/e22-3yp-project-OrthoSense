@@ -213,9 +213,10 @@ def test_patient_cannot_write_protected_session_fields(api_client, clinical_reco
 def test_patient_allowed_session_fields_and_clinician_review(api_client, clinical_records):
     env = clinical_records
     api_client.force_authenticate(user=env["pat_a"])
-    assert api_client.post("/api/v1/sessions/", {"exercise_name": "Allowed exercise", "patient_reported_reps": 3}, format="json").status_code == 201
+    # Legacy free-form creation is replaced by prescription-bound start.
+    assert api_client.post("/api/v1/sessions/", {"exercise_name": "Allowed exercise", "patient_reported_reps": 3}, format="json").status_code == 400
     url = f'/api/v1/sessions/{env["session"].pk}/'
-    assert api_client.patch(url, {"patient_reported_reps": 7}, format="json").status_code == 200
+    assert api_client.post(url + "transition/", {"operation": "finish", "patient_reported_reps": 7}, format="json").status_code == 200
     assert api_client.post(url + "review/", {"notes": "Forged"}).status_code == 403
     assert api_client.delete(url).status_code == 405
     api_client.force_authenticate(user=env["doc_b"])
@@ -227,7 +228,7 @@ def test_patient_allowed_session_fields_and_clinician_review(api_client, clinica
 
 
 def payload(env, **overrides):
-    return {"device_id": env["device"].device_identifier, "session_id": str(env["session"].pk),
+    return {"schema_version": 1, "source": "hardware", "elapsed_ms": 0, "device_id": env["device"].device_identifier, "session_id": str(env["session"].pk),
             "boot_id": "security-test", "sequence_number": 1, "samples": [{"offset_ms": 0, "knee_angle_deg": 15}], **overrides}
 
 
@@ -278,6 +279,7 @@ def test_admin_can_register_validate_assignment_and_revoke(api_client, seed_envi
     data = {"device_identifier": "NEW-ADMIN-DEVICE", "mac_address": "33:44:55:66:77:88", "assigned_patient_id": str(env["doc_a"].pk)}
     assert api_client.post("/api/v1/devices/", data, format="json").status_code == 400
     assert not Device.objects.filter(device_identifier=data["device_identifier"]).exists()
+    DeviceAssignment.objects.filter(patient=env["pat_a"], active=True).update(active=False)
     data["assigned_patient_id"] = str(env["pat_a"].pk)
     response = api_client.post("/api/v1/devices/", data, format="json")
     assert response.status_code == 201

@@ -62,6 +62,7 @@ class PlanVersionSerializer(StrictWriteFieldsMixin, serializers.ModelSerializer)
             "version_number",
             "status",
             "clinical_notes",
+            "schedule",
             "published_at",
             "prescriptions",
             "created_at",
@@ -94,7 +95,33 @@ class PrescriptionItemInputSerializer(serializers.Serializer):
         return attrs
 
 
-class PlanVersionCreateSerializer(StrictWriteFieldsMixin, serializers.ModelSerializer):
+class ScheduleEntrySerializer(serializers.Serializer):
+    exercise_id = serializers.UUIDField()
+    scheduled_at = serializers.DateTimeField()
+
+
+class ScheduleValidationMixin:
+    def validate_schedule(self, value):
+        result = ScheduleEntrySerializer(data=value, many=True)
+        result.is_valid(raise_exception=True)
+        return [{"exercise_id": str(item["exercise_id"]), "scheduled_at": item["scheduled_at"].isoformat()} for item in result.validated_data]
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        schedule = attrs.get("schedule", self.instance.schedule if self.instance else [])
+        if "items" in attrs:
+            exercises = {str(item["exercise_id"]) for item in attrs["items"]}
+        elif self.instance:
+            exercises = {str(value) for value in self.instance.prescriptions.values_list("exercise_id", flat=True)}
+        else:
+            exercises = set()
+        if any(item["exercise_id"] not in exercises for item in schedule):
+            raise serializers.ValidationError({"schedule": "Reminder exercises must be present in this draft."})
+        return attrs
+
+
+class PlanVersionCreateSerializer(ScheduleValidationMixin, StrictWriteFieldsMixin, serializers.ModelSerializer):
+    schedule = serializers.ListField(child=serializers.DictField(), required=False, max_length=366)
     items = PrescriptionItemInputSerializer(many=True, required=False, write_only=True)
 
     class Meta:
@@ -102,6 +129,7 @@ class PlanVersionCreateSerializer(StrictWriteFieldsMixin, serializers.ModelSeria
         fields = [
             "patient",
             "clinical_notes",
+            "schedule",
             "items",
         ]
 
@@ -119,7 +147,7 @@ class PlanVersionCreateSerializer(StrictWriteFieldsMixin, serializers.ModelSeria
         patient = User.objects.select_for_update().get(pk=validated_data["patient"].pk)
         maximum = PlanVersion.objects.filter(patient=patient).aggregate(value=Max("version_number"))["value"] or 0
         plan = PlanVersion.objects.create(patient=patient, authored_by=self.context["request"].user,
-            version_number=maximum + 1, clinical_notes=validated_data.get("clinical_notes", ""))
+            version_number=maximum + 1, clinical_notes=validated_data.get("clinical_notes", ""), schedule=validated_data.get("schedule", []))
         replace_items(plan, items)
         return plan
 
@@ -132,12 +160,13 @@ def replace_items(plan, items):
         ExercisePrescription.objects.create(plan_version=plan, **values)
 
 
-class PlanDraftUpdateSerializer(StrictWriteFieldsMixin, serializers.ModelSerializer):
+class PlanDraftUpdateSerializer(ScheduleValidationMixin, StrictWriteFieldsMixin, serializers.ModelSerializer):
+    schedule = serializers.ListField(child=serializers.DictField(), required=False, max_length=366)
     items = PrescriptionItemInputSerializer(many=True, required=False, write_only=True)
 
     class Meta:
         model = PlanVersion
-        fields = ["clinical_notes", "items"]
+        fields = ["clinical_notes", "items", "schedule"]
 
     def to_representation(self, instance):
         return PlanVersionSerializer(instance, context=self.context).data
@@ -150,6 +179,8 @@ class PlanDraftUpdateSerializer(StrictWriteFieldsMixin, serializers.ModelSeriali
         items = validated_data.pop("items", None)
         if "clinical_notes" in validated_data:
             instance.clinical_notes = validated_data["clinical_notes"]
+        if "schedule" in validated_data:
+            instance.schedule = validated_data["schedule"]
         instance.save()
         if items is not None:
             replace_items(instance, items)

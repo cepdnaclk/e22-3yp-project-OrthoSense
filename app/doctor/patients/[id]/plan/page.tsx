@@ -12,7 +12,7 @@ import type { PlanDto } from "@/lib/services/api-contract";
 function fromDto(p: PlanDto): ExercisePlan {
   return { id: p.id, patientId: p.patient, patientName: p.patient_name, doctorId: p.authored_by,
     doctorName: p.doctor_name, version: p.version_number, state: ({DRAFT:"Draft",PUBLISHED:"Published",ARCHIVED:"Archived"} as const)[p.status],
-    createdAt: p.created_at, publishedAt: p.published_at ?? undefined, clinicalNotes: p.clinical_notes,
+    schedule:p.schedule ?? [], createdAt: p.created_at, publishedAt: p.published_at ?? undefined, clinicalNotes: p.clinical_notes,
     items: p.prescriptions.map(rx => ({id:rx.id,exerciseId:rx.exercise.id,exerciseName:rx.exercise.name,targetReps:rx.target_repetitions,
       targetSets:rx.target_sets,targetFlexionDeg:rx.target_flexion_deg,targetExtensionDeg:rx.target_extension_deg,
       restIntervalSeconds:rx.rest_interval_seconds,instructions:rx.notes})) };
@@ -25,6 +25,7 @@ export default function PlanEditorPage() {
   const [history,setHistory] = React.useState<ExercisePlan[]>([]);
   const [plan,setPlan] = React.useState<ExercisePlan | null>(null);
   const [items,setItems] = React.useState<ExercisePlanItem[]>([]);
+  const [schedule,setSchedule] = React.useState<import("@/lib/types").ExerciseReminder[]>([]);
   const [notes,setNotes] = React.useState("");
   const [dirty,setDirty] = React.useState(false);
   const [loading,setLoading] = React.useState(true);
@@ -32,14 +33,14 @@ export default function PlanEditorPage() {
   const [error,setError] = React.useState("");
   const [notice,setNotice] = React.useState("");
   const locked = !!plan && plan.state !== "Draft";
-  const adopt = (value: ExercisePlan | null) => { setPlan(value); setItems(value?.items ?? []); setNotes(value?.clinicalNotes ?? ""); setDirty(false); };
+  const adopt = (value: ExercisePlan | null) => { setSchedule(value?.schedule ?? []);setPlan(value); setItems(value?.items ?? []); setNotes(value?.clinicalNotes ?? ""); setDirty(false); };
   React.useEffect(() => {
     let active = true;
     Promise.all([patientsApi.getById(patientId),exercisesApi.getAll(),plansApi.getAll(patientId)]).then(([p,c,h]) => {
       if (!active) return;
       setPatient(p); setCatalog(c); setHistory(h);
       const chosen = h.find(x => x.state === "Draft") ?? h.find(x => x.state === "Published") ?? null;
-      setPlan(chosen); setItems(chosen?.items ?? []); setNotes(chosen?.clinicalNotes ?? ""); setLoading(false);
+      setSchedule(chosen?.schedule ?? []);setPlan(chosen); setItems(chosen?.items ?? []); setNotes(chosen?.clinicalNotes ?? ""); setLoading(false);
     }).catch(() => { if(active) { setError("Unable to load this patient's plans. Reload to retry."); setLoading(false); } });
     return () => { active = false; };
   },[patientId]);
@@ -50,7 +51,7 @@ export default function PlanEditorPage() {
   },[dirty]);
   const update = (id:string,key:keyof ExercisePlanItem,value:string | number) => { setItems(items.map(x => x.id === id ? {...x,[key]:value} : x)); setDirty(true); setNotice(""); };
   const persist = async () => {
-    const body = { clinical_notes:notes,items:items.map((x,order) => ({exercise_id:x.exerciseId,target_repetitions:x.targetReps,target_sets:x.targetSets,
+    const body = { schedule:schedule.filter(entry => items.some(item => item.exerciseId===entry.exercise_id)),clinical_notes:notes,items:items.map((x,order) => ({exercise_id:x.exerciseId,target_repetitions:x.targetReps,target_sets:x.targetSets,
       target_flexion_deg:x.targetFlexionDeg,target_extension_deg:x.targetExtensionDeg,rest_interval_seconds:x.restIntervalSeconds,notes:x.instructions,order})) };
     const saved = fromDto(plan ? await plansApi.update(plan.id,body) : await plansApi.create({patient:patientId,...body}));
     adopt(saved); setHistory(h => [saved,...h.filter(x => x.id !== saved.id)]); return saved;
@@ -95,6 +96,11 @@ export default function PlanEditorPage() {
         <label className="block">Instructions<textarea className="mt-1 block w-full rounded border p-2" value={item.instructions} onChange={e => update(item.id,"instructions",e.target.value)} /></label>
         <button type="button" disabled={index === 0} onClick={() => {const next=[...items];[next[index-1],next[index]]=[next[index],next[index-1]];setItems(next);setDirty(true);}}>Move up</button>
       </div>)}
+      <section className="space-y-3 rounded-xl border bg-white p-4"><h2 className="font-bold">Calendar reminders</h2><p className="text-sm text-slate-600">Choose a date and time in your browser&apos;s local timezone for a prescribed exercise. Reminders appear after publishing.</p>
+      {items.map(item => <label key={item.id} className="block">{item.exerciseName}<input className="ml-3 rounded border p-2" type="datetime-local" onChange={event => {
+        if(event.target.value) {setSchedule([...schedule,{exercise_id:item.exerciseId,scheduled_at:new Date(event.target.value).toISOString()}]);setDirty(true);event.target.value="";}
+      }} /></label>)}
+      <ul>{schedule.map((entry,index) => <li key={index}>{items.find(item => item.exerciseId===entry.exercise_id)?.exerciseName || "Removed exercise"} ? {new Date(entry.scheduled_at).toLocaleString()} <button type="button" onClick={() => {setSchedule(schedule.filter((_,i) => i!==index));setDirty(true);}}>Remove reminder</button></li>)}</ul></section>
     </fieldset>
     <section className="space-y-2"><h2 className="text-lg font-bold">Saved versions</h2>{history.map(x => <button key={x.id} className="mr-3 rounded border px-3 py-2" disabled={busy} onClick={() => {if(!dirty || confirm("Discard unsaved edits and open this version?")) adopt(x);}}>v{x.version} ? {x.state}</button>)}</section>
     </>}
